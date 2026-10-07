@@ -65,6 +65,7 @@ class Settings:
     ai_provider: str = "openai"
     ai_api_key: str = ""
     ai_model: str = "gpt-4o-mini"
+    ai_base_url: str = ""           # pour tout service compatible OpenAI
 
     # ------------------------------------------------------------------
     @property
@@ -120,6 +121,7 @@ def load_settings() -> Settings:
         ai_provider=os.getenv("AI_PROVIDER", "openai").strip() or "openai",
         ai_api_key=os.getenv("AI_API_KEY", "").strip(),
         ai_model=os.getenv("AI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+        ai_base_url=os.getenv("AI_BASE_URL", "").strip(),
     )
 
     # En developpement, on genere une cle ephemere plutot que d'echouer :

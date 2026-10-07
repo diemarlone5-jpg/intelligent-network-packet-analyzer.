@@ -214,32 +214,68 @@ def pick_default_interface() -> InterfaceInfo | None:
     return usable[0] if usable else None
 
 
+def _normalize_ip(value: str) -> str:
+    """Ramene une adresse a sa forme canonique.
+
+    Indispensable pour IPv6, ou une meme adresse s'ecrit de plusieurs facons
+    (majuscules, zeros compresses, suffixe de zone). Sans normalisation, une
+    machine peut ne pas etre reconnue comme locale.
+    """
+    import ipaddress as _ipaddress
+
+    if not value:
+        return ""
+    text = value.split("%")[0].strip()          # retire le suffixe de zone
+    try:
+        return _ipaddress.ip_address(text).compressed
+    except ValueError:
+        return text
+
+
 def local_ips() -> set[str]:
-    """Toutes les adresses IPv4 de la machine, y compris la boucle locale.
+    """Toutes les adresses IP de la machine, IPv4 ET IPv6, y compris la boucle locale.
 
     Sert a qualifier le sens des communications (sortant / entrant / interne).
+    Les IPv6 sont indispensables : sur un reseau moderne, une grande partie du
+    trafic sortant part en IPv6, et l'oublier fait qualifier a tort une
+    communication sortante d'entrante.
     """
-    addresses = {"127.0.0.1"}
+    addresses = {"127.0.0.1", "::1"}
+
     try:
         hostname = socket.gethostname()
-        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            addresses.add(info[4][0])
+        for family in (socket.AF_INET, socket.AF_INET6):
+            for info in socket.getaddrinfo(hostname, None, family):
+                addresses.add(info[4][0])
     except Exception:
         pass
+
+    # Adresses declarees par les interfaces (IPv4 pour l'affichage)
     for iface in list_interfaces():
         addresses.update(iface.addresses)
 
-    # Adresse utilisee pour joindre Internet : la plus representative
+    # Toutes les adresses connues du systeme, IPv6 comprises
     try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        probe.settimeout(0.5)
-        probe.connect(("8.8.8.8", 80))
-        addresses.add(probe.getsockname()[0])
-        probe.close()
+        from scapy.arch.windows import get_windows_if_list
+        for entry in get_windows_if_list():
+            addresses.update(entry.get("ips") or [])
     except Exception:
         pass
 
-    return {a for a in addresses if a and a != "0.0.0.0"}
+    # Adresse utilisee pour joindre Internet : la plus representative
+    for family, target in ((socket.AF_INET, ("8.8.8.8", 80)),
+                           (socket.AF_INET6, ("2001:4860:4860::8888", 80))):
+        try:
+            probe = socket.socket(family, socket.SOCK_DGRAM)
+            probe.settimeout(0.5)
+            probe.connect(target)
+            addresses.add(probe.getsockname()[0])
+            probe.close()
+        except Exception:
+            pass
+
+    normalized = {_normalize_ip(a) for a in addresses if a and a != "0.0.0.0"}
+    return {a for a in normalized if a}
 
 
 def find_interface(identifier: str) -> InterfaceInfo | None:

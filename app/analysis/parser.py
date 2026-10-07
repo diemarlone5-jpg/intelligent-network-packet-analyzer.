@@ -145,15 +145,35 @@ class PacketParser:
     """
 
     def __init__(self, local_ips: set[str] | None = None) -> None:
-        self.local_ips: set[str] = set(local_ips or ())
-        self.local_ips.update({"127.0.0.1", "::1", "0.0.0.0"})
+        from app.capture.interfaces import _normalize_ip
+
+        self._normalize = _normalize_ip
+        self.local_ips: set[str] = set()
+        self.set_local_ips(local_ips or set())
 
     def set_local_ips(self, ips: set[str]) -> None:
-        self.local_ips = set(ips)
-        self.local_ips.update({"127.0.0.1", "::1", "0.0.0.0"})
+        """Remplace la liste des adresses locales, en forme canonique."""
+        normalized = {self._normalize(ip) for ip in ips if ip}
+        normalized.update({"127.0.0.1", "::1", "0.0.0.0"})
+        self.local_ips = {value for value in normalized if value}
 
     def is_local(self, ip: str | None) -> bool:
-        return bool(ip and ip in self.local_ips)
+        """L'adresse appartient-elle a cette machine ?
+
+        La comparaison est faite apres normalisation : une adresse IPv6 peut
+        s'ecrire de plusieurs facons equivalentes, et une comparaison de chaines
+        brutes echouerait selon la forme utilisee par le paquet.
+        """
+        if not ip:
+            return False
+        if ip in self.local_ips:
+            return True
+        import ipaddress
+
+        try:
+            return ipaddress.ip_address(ip.split("%")[0]).compressed in self.local_ips
+        except ValueError:
+            return False
 
     # ------------------------------------------------------------------
     def parse(self, pkt: Packet, number: int) -> PacketRecord:

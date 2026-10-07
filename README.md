@@ -62,10 +62,17 @@ vérifiable). Un comportement inhabituel n'est jamais présenté comme une attaq
   en-tête `Host` des requêtes HTTP en clair, nom interrogé dans une requête DNS.
 - **Moteur d'explication** — texte en langage humain, faits, interprétations
   justifiées, réserves.
-- **Détection comportementale** — 10 règles (voir §7).
+- **Indicateur de risque par communication** — score de 0 à 100, chaque point
+  attribué étant rattaché au fait observé qui le justifie.
+- **Détection comportementale** — 11 règles (voir §7).
 - **Enrichissement par API externe** — pays, opérateur, réseau d'une adresse IP.
+- **Résumé de session en langage humain** — composé localement par défaut ; une
+  couche IA peut le reformuler, sous contrôle (§13).
 - **Interface web** — tableau de bord, paquets, communications, détail d'analyse,
-  événements, historique, page de compréhension.
+  événements, base de connaissance des protocoles, historique, page de
+  compréhension.
+- **État des services** — l'utilisateur voit immédiatement quelle dépendance ne
+  répond pas, et que l'analyse continue malgré tout.
 - **Historique** — SQLite en local, **Supabase** en ligne.
 
 ---
@@ -134,16 +141,20 @@ packet-analyzer/
 │   │   └── agent.py            capture démirable / arrêtable
 │   ├── analysis/
 │   │   ├── parser.py           paquet → enregistrement plat + SNI / Host / DNS
-│   │   ├── protocols.py        base de connaissance (≈ 60 ports documentés)
+│   │   ├── protocols.py        base de connaissance (58 ports, 10 protocoles)
 │   │   ├── flows.py            regroupement + machine à états TCP
 │   │   ├── explain.py          moteur d'explication
+│   │   ├── risk.py             indicateur de risque justifié
 │   │   └── detectors.py        détection comportementale
+│   ├── intelligence/           résumé et reformulation sous contrôle
+│   │   ├── context.py          contexte fermé (seule matière autorisée)
+│   │   └── summarizer.py       fournisseurs + vérificateur anti-invention
 │   ├── enrichment/ip_intel.py  API externe + cache
 │   ├── storage/                base.py, sqlite_repo.py, supabase_repo.py,
 │   │                           composite_repo.py
 │   └── web/                    app.py, routes.py, api.py, templates/, static/
 ├── schema/supabase.sql         schéma PostgreSQL commenté
-├── tests/                      98 tests automatisés
+├── tests/                      126 tests automatisés
 ├── Dockerfile · render.yaml    déploiement
 └── .env.example                modèle de configuration
 ```
@@ -208,7 +219,38 @@ d'Internet n'interrompt jamais une capture.
 
 ---
 
-## 7. Règles de détection
+## 7. Risque / statut
+
+Le cahier des charges demande, dans la vue détaillée, quatre éléments :
+informations techniques, analyse, explication humaine, **risque / statut**.
+
+Le score (0 à 100) n'est **pas** une probabilité d'attaque : c'est un indicateur
+d'attention. Il répond à « cette communication mérite-t-elle que je m'y
+arrête ? », pas à « est-ce une attaque ? ». Chaque point attribué est affiché
+avec le fait qui le justifie.
+
+| Élément observé | Points | Pourquoi |
+|---|---|---|
+| Service documenté comme sensible, en entrée | 25 | exposition vérifiable de la surface d'attaque |
+| Service sensible contacté en sortie | 12 | usage à confronter à l'usage attendu du poste |
+| Protocole en clair (Telnet, FTP, HTTP…) | 15 | identifiants potentiellement lisibles |
+| Connexion entrante depuis une adresse publique | 10 | provenance hors du réseau local |
+| Connexion refusée (RST observé) | 10 | révèle une recherche de service inexistant |
+| Volume important vers un hôte non identifié | 10 | transfert sans destination nommée |
+| Port de service non documenté | 5 | l'application ne peut pas l'interpréter |
+| Trafic chiffré sans nom de domaine annoncé | 5 | destination indéterminée |
+| Retransmissions nombreuses | 5 | réseau dégradé ou interférence |
+
+Tranches : **faible** (0–14), **modéré** (15–34), **élevé** (35–59),
+**critique** (60+).
+
+> Un score élevé sur une communication parfaitement légitime est normal : un
+> serveur SSH administré volontairement depuis Internet est à la fois légitime
+> et digne d'attention. C'est pourquoi les raisons sont toujours affichées.
+
+---
+
+## 8. Règles de détection
 
 Seuils définis dans `app/analysis/detectors.py`, tous modifiables.
 
@@ -233,7 +275,7 @@ déduite ? ». Un délai anti-répétition évite qu'une même règle inonde l'�
 
 ---
 
-## 8. Installation
+## 9. Installation
 
 ### Prérequis
 
@@ -286,7 +328,7 @@ Puis, dans `.env`, renseignez au minimum :
 
 ---
 
-## 9. Utilisation
+## 10. Utilisation
 
 ```bash
 python run.py                       # http://127.0.0.1:8000
@@ -310,7 +352,7 @@ Un filtre de capture est disponible (syntaxe BPF) : `tcp port 443`,
 
 ---
 
-## 10. Scénarios de test
+## 11. Scénarios de test
 
 ### Tests automatisés
 
@@ -345,10 +387,16 @@ reproductible sur une machine sans Npcap.
 | 10 | Interface invalide ou filtre BPF invalide | message compréhensible, capture non démarrée, pas de trace technique |
 | 11 | Base Supabase injoignable | bascule en local, avertissement affiché, capture non interrompue |
 | 12 | Arrêt de la capture puis consultation de l'historique | session enregistrée, communications et événements relus depuis la base |
+| 13 | Consultation de la page **Protocoles** | les 58 services documentés sont listés avec leur rôle, leur justification et un niveau de confiance ; les filtres « à surveiller » et « en clair » fonctionnent |
+| 14 | Communication vers un service sensible (SSH, RDP…) | score de risque élevé, chaque point accompagné du fait observé qui le justifie |
+| 15 | Clic sur **Actualiser** dans « Résumé de la session » | résumé en langage humain cohérent avec les chiffres affichés, mention de la source et du nombre d'entités autorisées |
+| 16 | `AI_ENABLED=true` sans clé d'API | le résumé par règles reste affiché, aucun appel réseau n'est tenté |
+| 17 | Panneau « État des services » | chaque dépendance montre son état réel ; Supabase désactivé est signalé sans être présenté comme une panne |
+| 18 | Trafic IPv6 sortant | la communication est bien qualifiée de **sortante** et non d'entrante (les adresses IPv6 de la machine sont reconnues) |
 
 ---
 
-## 11. Déploiement
+## 12. Déploiement
 
 ### Point essentiel : deux modes
 
@@ -374,7 +422,51 @@ La vérification de santé utilise `/api/status`.
 
 ---
 
-## 12. Sécurité
+## 13. Intelligence artificielle
+
+Le cahier des charges autorise l'IA mais interdit qu'elle devienne le cerveau du
+système. L'implémentation prend cette contrainte au sérieux, en trois temps.
+
+### 1. Le programme produit d'abord des données structurées et vérifiables
+
+Le moteur calcule tout : communications, états, services, risque, événements.
+Un **contexte fermé** (`app/intelligence/context.py`) est ensuite construit, qui
+ne contient que ces valeurs. Aucun paquet brut ne lui est transmis.
+
+### 2. Une couche d'intelligence reformule ce contexte
+
+Deux fournisseurs interchangeables :
+
+| Fournisseur | Configuration | Comportement |
+|---|---|---|
+| **règles** (défaut) | aucune | résumé composé localement, déterministe, aucun appel réseau, aucun secret |
+| **openai** | `AI_ENABLED=true` + `AI_API_KEY` | appel à toute API compatible OpenAI (OpenAI, Groq, Ollama, LM Studio) |
+
+Le mode par défaut ne requiert **aucune clé** : la fonctionnalité marche
+immédiatement, et l'IA est un enrichissement facultatif.
+
+### 3. La réponse est vérifiée après coup
+
+C'est le point le plus important. La consigne donnée au modèle (« ne cite aucune
+adresse ni domaine absent du contexte ») ne suffit pas : un modèle peut
+halluciner. Le texte produit est donc **analysé** (`Summarizer._validate`) :
+
+- toutes les adresses IP et tous les noms de domaine cités sont extraits ;
+- chacun doit exister dans le contexte fourni ;
+- si une seule entité est absente, **la génération est rejetée** et le résumé
+  par règles est affiché à la place, avec un message expliquant pourquoi.
+
+Autrement dit, la garantie « aucune invention » n'est pas une intention
+déclarée : c'est un contrôle exécuté à chaque appel, et couvert par des tests
+(`tests/test_intelligence.py`).
+
+L'interface affiche systématiquement, sous le résumé, la source utilisée et le
+nombre d'entités autorisées — l'utilisateur peut donc constater que rien n'a
+été ajouté.
+
+---
+
+## 14. Sécurité
 
 - **Aucun secret dans le code** — tout vient de variables d'environnement.
   `.env` est ignoré par Git, `.env.example` est fourni à la place.
@@ -398,7 +490,7 @@ La vérification de santé utilise `/api/status`.
 
 ---
 
-## 13. Limites
+## 15. Limites
 
 Ce que l'analyseur **ne sait pas faire** — ces limites sont aussi affichées dans
 la page « Comprendre » de l'application :
@@ -421,10 +513,14 @@ la page « Comprendre » de l'application :
   rudimentaire.
 - **Pas de reconstruction de flux applicatif** : les fichiers transférés ne sont
   ni reconstitués ni exportés ; aucun export PCAP n'est proposé.
+- **Le score de risque suit un barème fixe.** Il n'est pas appris. Il indique ce
+  qui mérite un coup d'œil, jamais ce qui est malveillant.
+- **Le résumé automatique reste descriptif.** Il décrit ce qui a été observé ; il
+  ne diagnostique pas une attaque et ne propose pas de remédiation.
 
 ---
 
-## 14. Défense technique — questions probables
+## 16. Défense technique — questions probables
 
 <details>
 <summary><strong>Qu'est-ce qu'un paquet ?</strong></summary>
@@ -456,15 +552,47 @@ qui permet ensuite de compter séparément les octets dans chaque sens.
 </details>
 
 <details>
-<summary><strong>Comment évitez-vous que le système invente une conclusion ?</strong></summary>
+<summary><strong>Comment évitez-vous que votre système invente une conclusion ?</strong></summary>
 
 Trois mécanismes. D'abord, le texte est assemblé **uniquement** à partir des
 faits et des interprétations calculés — jamais à partir d'autre chose. Ensuite,
 chaque interprétation porte sa **justification** et un **niveau de confiance**,
 dégradé lorsque l'information est incomplète. Enfin, chaque analyse affiche une
-section **réserves** qui énonce explicitement ce qui n'a pas été observé. La
-couche IA, si elle est activée, ne peut que reformuler ce texte : elle n'a
-jamais accès à d'autres données.
+section **réserves** qui énonce explicitement ce qui n'a pas été observé.
+
+Pour la couche IA, la même exigence est appliquée par un contrôle exécutable :
+le modèle ne reçoit qu'un contexte fermé, et sa réponse est analysée. Toute
+adresse IP ou nom de domaine cité qui n'existe pas dans les observations fait
+rejeter la génération au profit du résumé déterministe. La consigne « n'invente
+rien » devient donc une garantie vérifiable, pas une promesse.
+
+</details>
+
+<details>
+<summary><strong>Comment votre application identifie-t-elle le sens d'une communication ?</strong></summary>
+
+D'abord par le **SYN réellement observé** : son port de destination est, par
+définition, le port du service, et son émetteur est l'initiateur. Si la capture
+a commencé en cours de connexion, aucun SYN n'existe : on retombe alors sur la
+position des ports (un service écoute sur un port bas, un client utilise un port
+élevé), et l'application **l'annonce explicitement** dans la justification, avec
+une confiance réduite et une réserve affichée.
+
+Pour UDP, qui n'établit pas de connexion, la notion même de SYN n'existe pas :
+l'application le dit au lieu de parler d'une ouverture qu'elle n'aurait pas vue.
+
+</details>
+
+<details>
+<summary><strong>Quelle information est réellement observée, et quelle information est déduite ?</strong></summary>
+
+Chaque fait affiché porte son origine. Les valeurs marquées « observation
+directe du paquet » viennent des octets lus (adresses, ports, drapeaux, taille).
+Celles marquées « compteur du flux » résultent d'un comptage effectué par
+l'application sur plusieurs paquets. Celles marquées « API externe » viennent de
+la source d'enrichissement. Enfin, le port du service peut être marqué
+« déduit » lorsque la capture a commencé trop tard — et dans ce cas, la
+confiance globale ne peut pas être maximale.
 
 </details>
 
@@ -502,7 +630,7 @@ ne voit jamais de pile d'appels.
 
 ---
 
-## 15. Auteur et contexte
+## 17. Auteur et contexte
 
 Projet réalisé dans le cadre du **SPRINT PYTHON 3** de
 **HACKTUALIZ ACADEMY CÔTE D'IVOIRE**.

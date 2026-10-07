@@ -108,6 +108,18 @@
     return "state state--closed";
   }
 
+  /* Le risque est calcule par le serveur a partir de faits observes. La page
+     ne fait que l'afficher : elle n'attribue jamais de niveau elle-meme. */
+  function riskBadge(risk) {
+    if (!risk) return h("span", { class: "risk-badge", text: "—" });
+    var niveau = risk.label || "inconnu";
+    return h("span", {
+      class: "risk-badge risk-badge--" + niveau,
+      text: risk.score + " · " + niveau,
+      title: risk.summary || ""
+    });
+  }
+
   /* ------------------------------------------------------------------- flash */
 
   var flashTimer = null;
@@ -240,6 +252,90 @@
     }).catch(function () { setState("idle", "Capture arrêtée"); });
 
     return { setState: setState };
+  }
+
+  /* ------------------------------------------- 0. resume et etat des services */
+
+  function initSummaryAndServices() {
+    var summaryText = $("#summary-text");
+    if (summaryText) {
+      var loadSummary = function () {
+        summaryText.textContent = "Composition du résumé…";
+        api("/api/summary").then(function (data) {
+          var summary = data.summary || {};
+          $("#summary-source").textContent = "source : " + (summary.provider || "—");
+          summaryText.textContent = summary.text || "";
+
+          var guardrail = $("#summary-guardrail");
+          guardrail.hidden = false;
+          if (summary.fallback) {
+            guardrail.setAttribute("data-kind", "warn");
+            guardrail.textContent = summary.error ||
+              "La reformulation automatique a été écartée ; le résumé par règles est affiché.";
+          } else {
+            guardrail.setAttribute("data-kind", "ok");
+            var g = summary.guardrails || {};
+            guardrail.textContent =
+              "Aucun fait ajouté : " + (g.entites_autorisees || 0) +
+              " entité(s) issue(s) des observations, " +
+              ((g.inventions_detectees || []).length) + " invention(s) détectée(s).";
+          }
+        }).catch(function (error) {
+          summaryText.textContent = "Résumé indisponible : " + error.message;
+        });
+      };
+
+      var button = $("#btn-summary");
+      if (button) button.addEventListener("click", loadSummary);
+      window.__pkaSummaryRefresh = loadSummary;
+      loadSummary();
+    }
+
+    var servicesBox = $("#services-state");
+    if (servicesBox) {
+      var serviceRow = function (label, state, detail) {
+        return h("div", { class: "service-item", "data-state": state }, [
+          h("span", { class: "service-dot", "aria-hidden": "true" }),
+          h("span", { class: "service-label", text: label }),
+          h("span", { class: "service-detail", text: detail })
+        ]);
+      };
+
+      var etat = function (flag) {
+        if (flag === true) return "ok";
+        if (flag === false) return "ko";
+        return "off";
+      };
+
+      api("/api/dependencies").then(function (data) {
+        replace(servicesBox, [
+          serviceRow("Base locale", etat(data.base_locale.disponible),
+            data.base_locale.chemin),
+          serviceRow("Supabase",
+            data.supabase.active === false ? "off" : etat(data.supabase.disponible),
+            data.supabase.active === false
+              ? "désactivé (SUPABASE_ENABLED=false)"
+              : (data.supabase.erreur || "connecté")),
+          serviceRow("Capture réseau", etat(data.capture.disponible),
+            data.capture.disponible
+              ? (data.capture.interfaces + " interface(s) disponible(s)")
+              : data.capture.message),
+          serviceRow("Enrichissement",
+            data.enrichissement.active ? "ok" : "off",
+            data.enrichissement.active
+              ? (data.enrichissement.appels_externes + " appel(s), " +
+                 data.enrichissement.reponses_en_cache + " depuis le cache — " +
+                 data.enrichissement.source)
+              : "désactivé"),
+          serviceRow("Reformulation", "ok",
+            data.reformulation.modele_actif
+              ? ("modèle " + data.reformulation.fournisseur)
+              : "résumé par règles (aucune configuration requise)")
+        ]);
+      }).catch(function (error) {
+        replace(servicesBox, h("p", { class: "empty", text: "État indisponible : " + error.message }));
+      });
+    }
   }
 
   /* --------------------------------------------------------- 1. tableau de bord */
@@ -472,9 +568,10 @@
               text: flow.domain ? flow.domain : (flow.direction === "local" ? "sortant" : flow.direction === "distant" ? "entrant" : "indéterminé"),
               title: flow.domain || ""
             }),
+            h("td", null, riskBadge(flow.risk)),
             h("td", null, link)
           ]);
-        }) : emptyRow(10, "Aucune communication observée pour l'instant."));
+        }) : emptyRow(11, "Aucune communication observée pour l'instant."));
       }).catch(function (error) {
         counter.textContent = "Erreur : " + error.message;
       });
@@ -573,9 +670,32 @@
         ? caveats.map(function (text) { return h("li", { text: text }); })
         : h("li", { text: "Aucune réserve particulière sur cette analyse." }));
 
+      renderRisk(data.risk);
+
       if (data.intel && data.intel.source) {
         renderIntel(data.intel);
       }
+    }
+
+    function renderRisk(risk) {
+      var panel = document.querySelector(".panel--risk");
+      if (!risk) return;
+      if (panel) panel.setAttribute("data-level", risk.label || "inconnu");
+
+      $("#detail-risk-score").textContent = String(risk.score);
+      $("#detail-risk-label").textContent = risk.label || "—";
+      $("#detail-risk-summary").textContent = risk.summary || "";
+
+      var reasons = risk.reasons || [];
+      replace($("#detail-risk-reasons"), reasons.length
+        ? reasons.map(function (reason) {
+            return h("li", null, [
+              h("span", { class: "reason-points", text: "+" + reason.points }),
+              h("span", { text: reason.fact }),
+              h("span", { class: "reason-basis", text: "pourquoi : " + reason.basis })
+            ]);
+          })
+        : h("li", { class: "empty", text: "Aucun élément particulier ne retient l'attention." }));
     }
 
     function renderIntel(intel) {
@@ -779,7 +899,114 @@
     load();
   }
 
-  /* ---------------------------------------------------------------- 7. theme */
+  /* ------------------------------------------------- 8. base de connaissance */
+
+  function initProtocols() {
+    var body = $("#kb-ports");
+    if (!body) return;
+
+    var counter = $("#kb-count");
+    var searchInput = $("#kb-search");
+    var filterSelect = $("#kb-filter");
+    var ports = [];
+    var debounce = null;
+
+    function renderPorts() {
+      var needle = (searchInput.value || "").trim().toLowerCase();
+      var mode = filterSelect.value;
+
+      var filtered = ports.filter(function (entry) {
+        if (mode === "sensitive" && !entry.sensitive) return false;
+        if (mode === "cleartext" && entry.cleartext !== true) return false;
+        if (!needle) return true;
+        return String(entry.port).indexOf(needle) !== -1
+          || entry.service.toLowerCase().indexOf(needle) !== -1
+          || entry.meaning.toLowerCase().indexOf(needle) !== -1
+          || entry.why.toLowerCase().indexOf(needle) !== -1;
+      });
+
+      counter.textContent = filtered.length + " service(s) sur " + ports.length;
+
+      replace(body, filtered.length ? filtered.map(function (entry) {
+        var proprietes = [];
+        if (entry.sensitive) {
+          proprietes.push(h("span", { class: "badge badge--risk", text: "à surveiller" }));
+        }
+        if (entry.cleartext === true) {
+          proprietes.push(h("span", { class: "badge badge--http", text: "en clair" }));
+        }
+        if (entry.cleartext === false || entry.cleartext === null) {
+          if (entry.cleartext === false) {
+            proprietes.push(h("span", { class: "badge", text: "chiffré" }));
+          }
+        }
+        return h("tr", null, [
+          h("td", { class: "mono", text: String(entry.port) }),
+          h("td", { class: "mono", text: entry.transport }),
+          h("td", { text: entry.service }),
+          h("td", { text: entry.meaning }),
+          h("td", { text: entry.why }),
+          h("td", null, h("span", { class: "badge", text: entry.confidence })),
+          h("td", null, proprietes.length ? proprietes : h("span", { class: "muted", text: "—" }))
+        ]);
+      }) : emptyRow(7, "Aucun service ne correspond à cette recherche."));
+    }
+
+    function card(title, lines) {
+      return h("div", { class: "kb-card" }, [
+        h("h3", { class: "kb-card-title", text: title }),
+        h("dl", { class: "kv" }, lines)
+      ]);
+    }
+
+    function kvPair(label, value) {
+      return h("div", { class: "kv-row" }, [
+        h("dt", { text: label }),
+        h("dd", { text: value })
+      ]);
+    }
+
+    api("/api/protocols").then(function (data) {
+      ports = data.ports || [];
+      renderPorts();
+
+      replace($("#kb-transports"), (data.transports || []).map(function (item) {
+        return card(item.name + " — " + item.reliability, [
+          kvPair("Rôle", item.role),
+          kvPair("Usage typique", item.example)
+        ]);
+      }));
+
+      replace($("#kb-applications"), (data.applications || []).map(function (item) {
+        return card(item.name + (item.readable ? " — lisible" : " — chiffré"), [
+          kvPair("Ce que c'est", item.what),
+          kvPair("Comment on le reconnaît", item.clues)
+        ]);
+      }));
+
+      replace($("#kb-flags"), (data.tcp_flags || []).map(function (item) {
+        return kvPair(item.flags, item.meaning);
+      }));
+
+      replace($("#kb-network"), (data.network || []).map(function (item) {
+        return kvPair(item.term, item.meaning);
+      }));
+
+      replace($("#kb-scopes"), (data.scopes || []).map(function (item) {
+        return kvPair(item.key, item.label);
+      }));
+    }).catch(function (error) {
+      counter.textContent = "Erreur : " + error.message;
+    });
+
+    searchInput.addEventListener("input", function () {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(renderPorts, 200);
+    });
+    filterSelect.addEventListener("change", renderPorts);
+  }
+
+  /* ---------------------------------------------------------------- 9. theme */
 
   function initTheme() {
     var toggle = $("#theme-toggle");
@@ -797,12 +1024,14 @@
 
   function boot() {
     initCaptureControls();
+    initSummaryAndServices();
     initDashboard();
     initPackets();
     initFlows();
     initFlowDetail();
     initEvents();
     initHistory();
+    initProtocols();
     initTheme();
   }
 

@@ -168,6 +168,114 @@ async def history(request: Request, session_id: int | None = None):
     return {"ok": True, **engine_of(request).history(session_id)}
 
 
+@router.get("/protocols", summary="Base de connaissance reseau")
+async def protocols():
+    """Expose la table des ports et des protocoles utilisee par l'explication.
+
+    Permet de verifier, sans lire le code, sur quelles conventions s'appuie
+    l'application et a quel niveau de confiance.
+    """
+    from app.analysis.protocols import knowledge_base_export
+    return {"ok": True, **knowledge_base_export()}
+
+
+@router.get("/dependencies", summary="Etat des services dont depend l'application")
+async def dependencies(request: Request):
+    """Indique ce qui fonctionne et ce qui ne repond pas.
+
+    Repond directement a l'exigence de gestion des erreurs : l'utilisateur doit
+    voir qu'une dependance est tombee, et savoir que l'analyse continue malgre
+    tout, plutot que de decouvrir une panne silencieuse.
+    """
+    from app.capture.interfaces import capture_available, list_interfaces
+    from app.storage.composite_repo import CompositeRepository
+
+    settings = request.app.state.settings
+    repository = request.app.state.repository
+    enricher = request.app.state.enricher
+
+    # --- base locale ---
+    try:
+        local_ok = repository.ping()
+    except Exception:
+        local_ok = False
+
+    # --- base distante ---
+    if isinstance(repository, CompositeRepository):
+        remote = repository.remote
+        remote_ok = bool(repository.remote_available)
+        remote_error = repository.last_error or getattr(remote, "last_error", None)
+    elif settings.supabase_enabled:
+        remote_ok = False
+        remote_error = (
+            "Supabase est active mais l'application n'a pas pu s'y connecter au "
+            "demarrage : les donnees sont conservees en local."
+        )
+    else:
+        remote_ok = None
+        remote_error = None
+
+    # --- pilote de capture ---
+    if settings.is_local:
+        capture_ok, capture_message = capture_available()
+        interface_count = len(list_interfaces())
+    else:
+        capture_ok, capture_message = False, "mode consultation"
+        interface_count = 0
+
+    return {
+        "ok": True,
+        "base_locale": {
+            "disponible": local_ok,
+            "chemin": str(settings.sqlite_path),
+            "role": "historique local, toujours actif",
+        },
+        "supabase": {
+            "active": settings.supabase_enabled,
+            "disponible": remote_ok,
+            "erreur": remote_error,
+            "role": "historique consultable en ligne",
+        },
+        "capture": {
+            "mode": settings.mode,
+            "disponible": capture_ok,
+            "message": capture_message,
+            "interfaces": interface_count,
+        },
+        "enrichissement": {
+            "active": settings.enrich_enabled,
+            "appels_externes": getattr(enricher, "calls_made", 0) if enricher else 0,
+            "reponses_en_cache": getattr(enricher, "cache_hits", 0) if enricher else 0,
+            "source": "ipwho.is (secours : ip-api.com)",
+        },
+        "reformulation": {
+            "modele_actif": bool(settings.ai_enabled and settings.ai_api_key),
+            "fournisseur": settings.ai_model if settings.ai_enabled else "regles (local)",
+        },
+    }
+
+
+@router.get("/summary", summary="Resume de la session en langage humain")
+async def summary(request: Request):
+    """Resume ce qui a ete observe, en insistant sur ce qui n'est pas conclu.
+
+    Le resume par regles fonctionne sans aucune configuration. Si une couche IA
+    est activee, elle reformule ce resume, et sa reponse est verifiee : toute
+    adresse ou domaine cite qui n'existe pas dans les observations fait rejeter
+    la generation au profit du resume deterministe.
+    """
+    from app.intelligence import Summarizer, build_session_context
+
+    engine = engine_of(request)
+    context = build_session_context(engine)
+    summarizer = Summarizer(request.app.state.settings)
+    try:
+        result = summarizer.summarize(context)
+    finally:
+        summarizer.close()
+    return {"ok": True, "summary": result.to_dict()}
+
+
 # --------------------------------------------------------------------------
 # Flux temps reel
 # --------------------------------------------------------------------------

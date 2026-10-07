@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Protocoles — Packet Analyzer{% endblock %}
+{% block heading %}Base de connaissance réseau{% endblock %}
+{% block subheading %}Ce que l'application sait interpréter, et pourquoi chaque protocole est utilisé.{% endblock %}
+
+{% block content %}
+
+<div class="callout callout--info">
+  <h3>Pourquoi cette page existe</h3>
+  <p>
+    C'est le référentiel sur lequel s'appuie le moteur d'explication. Chaque
+    fois que l'application écrit « ce port est généralement utilisé par… », elle
+    consulte ces tables. Les afficher rend le raisonnement <strong>vérifiable</strong> :
+    vous pouvez constater ce qui est documenté, ce qui ne l'est pas, et à quel
+    niveau de confiance.
+  </p>
+</div>
+
+<section class="toolbar">
+  <label class="field">
+    <span class="field-label">Rechercher</span>
+    <input id="kb-search" class="input" type="search"
+           placeholder="un port, un nom de service, un mot du rôle…" autocomplete="off">
+  </label>
+  <label class="field">
+    <span class="field-label">Afficher</span>
+    <select id="kb-filter" class="input input--select">
+      <option value="all">tous les services documentés</option>
+      <option value="sensitive">ceux à surveiller</option>
+      <option value="cleartext">ceux qui ne chiffrent pas</option>
+    </select>
+  </label>
+  <p class="toolbar-note" id="kb-count">—</p>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Ports et services documentés</h2>
+    <span class="panel-hint">une convention d'usage, jamais une preuve</span>
+  </header>
+  <div class="table-wrap">
+    <table class="table table--dense">
+      <thead>
+        <tr>
+          <th scope="col">Port</th>
+          <th scope="col">Transport</th>
+          <th scope="col">Service</th>
+          <th scope="col">Ce que c'est</th>
+          <th scope="col">Pourquoi on l'utilise</th>
+          <th scope="col">Confiance</th>
+          <th scope="col">Propriétés</th>
+        </tr>
+      </thead>
+      <tbody id="kb-ports">
+        <tr><td colspan="7" class="empty">Chargement de la base…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Protocoles de transport</h2>
+      <span class="panel-hint">pourquoi l'un plutôt que l'autre</span>
+    </header>
+    <div id="kb-transports" class="kb-cards"></div>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Protocoles applicatifs reconnus</h2>
+      <span class="panel-hint">et l'indice qui permet de les reconnaître</span>
+    </header>
+    <div id="kb-applications" class="kb-cards"></div>
+  </section>
+
+</div>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Signification des drapeaux TCP</h2>
+      <span class="panel-hint">ce que raconte chaque paquet</span>
+    </header>
+    <dl class="kv" id="kb-flags"></dl>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Notions de base</h2>
+      <span class="panel-hint">paquet, adresse, TTL…</span>
+    </header>
+    <dl class="kv" id="kb-network"></dl>
+  </section>
+
+</div>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Nature des adresses</h2>
+    <span class="panel-hint">classification calculée localement, sans appel externe</span>
+  </header>
+  <dl class="kv" id="kb-scopes"></dl>
+</section>
+
+{% endblock %}

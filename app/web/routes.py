@@ -104,6 +104,18 @@ async def history(request: Request):
     return templates.TemplateResponse(request, "history.html", context)
 
 
+@router.get("/protocols", response_class=HTMLResponse)
+async def protocols(request: Request):
+    """Referentiel consultable : ce que l'application sait interpreter.
+
+    Cette page rend le raisonnement verifiable : l'utilisateur peut comparer ce
+    qui est documente avec ce que l'application affirme.
+    """
+    context = base_context(request)
+    context["active"] = "protocols"
+    return templates.TemplateResponse(request, "protocols.html", context)
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about(request: Request):
     """Page de comprehension : elle explique le fonctionnement du systeme.

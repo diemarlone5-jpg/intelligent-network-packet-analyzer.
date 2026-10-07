@@ -362,6 +362,54 @@ for _info in _PORT_LIST:
     for _t in _info.transport.split("/"):
         PORT_KNOWLEDGE[(_t, _info.port)] = _info
 
+# Liste sans doublon, pour la page de reference : chaque service n'y apparait
+# qu'une fois, meme lorsqu'il est documente sur les deux transports.
+ALL_PORTS: tuple[PortInfo, ...] = tuple(_PORT_LIST)
+
+
+def knowledge_base_export() -> dict:
+    """Exporte la base de connaissance pour l'affichage.
+
+    Utilise par la page « Protocoles » : le visiteur peut y consulter les
+    conventions documentees et verifier ce que l'application sait interpreter.
+    """
+    return {
+        "ports": [
+            {
+                "port": p.port,
+                "transport": p.transport.upper(),
+                "service": p.service,
+                "meaning": p.meaning,
+                "why": p.why,
+                "confidence": p.confidence,
+                "sensitive": p.sensitive,
+                "cleartext": p.cleartext,
+            }
+            for p in sorted(ALL_PORTS, key=lambda p: (p.port, p.transport))
+        ],
+        "transports": [
+            {"name": name, "role": info.role, "reliability": info.reliability,
+             "example": info.example}
+            for name, info in TRANSPORT_KNOWLEDGE.items()
+        ],
+        "applications": [
+            {"name": info.name, "what": info.what, "readable": info.readable,
+             "clues": info.clues}
+            for info in APP_PROTOCOLS.values()
+        ],
+        "tcp_flags": [
+            {"flags": flags, "meaning": meaning}
+            for flags, meaning in TCP_FLAG_MEANING.items()
+        ],
+        "network": [
+            {"term": term, "meaning": meaning}
+            for term, meaning in NETWORK_KNOWLEDGE.items()
+        ],
+        "scopes": [
+            {"key": key, "label": label} for key, label in SCOPE_LABELS.items()
+        ],
+    }
+
 
 def lookup_port(port: int | None, transport: str | None) -> PortInfo | None:
     """Retourne la connaissance associee a un port, ou None si inconnue.

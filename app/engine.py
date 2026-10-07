@@ -281,9 +281,9 @@ class AnalyzerEngine:
     def _flow_view(self, flow: Flow) -> dict:
         """Vue enrichie d'une communication, destinee a l'interface.
 
-        Le service, l'etat lisible et le sens de l'initiative sont calcules ici
-        plutot que dans le navigateur : l'interface web doit se contenter
-        d'afficher, jamais d'interpreter.
+        Le service, l'etat lisible, le sens de l'initiative et le niveau de
+        risque sont calcules ici plutot que dans le navigateur : l'interface web
+        doit se contenter d'afficher, jamais d'interpreter.
         """
         from app.analysis.flows import (
             infer_direction,
@@ -291,6 +291,7 @@ class AnalyzerEngine:
             state_label,
         )
         from app.analysis.protocols import lookup_port
+        from app.analysis.risk import assess_flow
 
         data = flow.to_dict()
         try:
@@ -304,11 +305,20 @@ class AnalyzerEngine:
             data["caveats"] = [] if flow.handshake_seen else [
                 "Le debut de cette communication n'a pas ete observe."
             ]
+
+            # Le risque alimente a la fois l'affichage et l'historique : le
+            # calculer ici evite de le recalculer lors de la persistance.
+            risk = assess_flow(flow, self.parser.is_local)
+            data["risk"] = risk.to_dict()
+            flow.risk_score = risk.score
+            flow.risk_label = risk.label
         except Exception:
             # Une vue degradee reste preferable a une page en erreur
             data.setdefault("service", None)
             data.setdefault("state_label", flow.state)
             data.setdefault("direction", "inconnu")
+            data.setdefault("risk", {"score": 0, "label": "inconnu",
+                                     "summary": "", "reasons": []})
         return data
 
     def event_snapshot(self, limit: int = 100) -> list[dict]:
@@ -336,6 +346,11 @@ class AnalyzerEngine:
         payload = explanation.to_dict()
         payload["flow"] = flow.to_dict()
         payload["intel"] = intel.to_dict() if intel else None
+
+        # Le risque accompagne l'explication : la vue detaillee doit presenter
+        # informations techniques, analyse, explication ET risque / statut.
+        from app.analysis.risk import assess_flow
+        payload["risk"] = assess_flow(flow, self.parser.is_local).to_dict()
         return payload
 
     # ==================================================================

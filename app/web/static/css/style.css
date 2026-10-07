@@ -459,6 +459,70 @@ code, .mono {
   padding: 7px 10px; border-radius: var(--radius-sm);
   background: var(--surface-2); font-size: 13px;
 }
+
+/* Resume de session et etat des services ----------------------------------- */
+
+.panel--summary {
+  background: linear-gradient(135deg, var(--info-soft), transparent 65%), var(--surface);
+  border-color: var(--border);
+}
+.panel-actions { display: flex; align-items: center; gap: 10px; }
+
+.summary-text {
+  font-size: 14.5px;
+  line-height: 1.75;
+  max-width: 92ch;
+  margin: 0;
+}
+.summary-guardrail {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+.summary-guardrail[data-kind="ok"] { color: var(--ok); }
+.summary-guardrail[data-kind="warn"] { color: var(--warn); }
+
+.services { display: flex; flex-direction: column; gap: 1px; }
+.service-item {
+  display: grid;
+  grid-template-columns: 12px minmax(120px, 165px) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.service-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); }
+.service-item[data-state="ok"]  .service-dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.service-item[data-state="ko"]  .service-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.service-item[data-state="off"] .service-dot { background: var(--text-dim); opacity: 0.5; }
+.service-item[data-state="ko"]  .service-detail { color: var(--danger); }
+.service-label { font-weight: 600; color: var(--text); }
+.service-detail { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; word-break: break-word; }
+
+/* Cartes de la base de connaissance --------------------------------------- */
+.kb-cards { display: flex; flex-direction: column; gap: 12px; }
+
+.kb-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 15px;
+}
+.kb-card-title {
+  font-size: 13.5px;
+  font-family: var(--mono);
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+.kb-card .kv-row { grid-template-columns: minmax(120px, 32%) 1fr; padding: 5px 0; }
+.kb-card .kv dt { font-size: 11.5px; }
+.kb-card .kv dd { font-size: 12.5px; }
 .list .mono { background: transparent; border: none; padding: 0; }
 .list .count { font-family: var(--mono); color: var(--text-dim); font-size: 12px; }
 
@@ -604,6 +668,85 @@ code, .mono {
 .caveats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .caveats li { position: relative; padding-left: 22px; font-size: 13px; color: var(--text-muted); }
 .caveats li::before { content: "!"; position: absolute; left: 4px; top: 0; color: var(--warn); font-weight: 700; }
+
+/* -------------------------------------------------- risque / statut ------ */
+
+.panel--risk { border-left: 3px solid var(--text-dim); }
+.panel--risk[data-level="faible"]   { border-left-color: var(--ok); }
+.panel--risk[data-level="modere"]   { border-left-color: var(--info); }
+.panel--risk[data-level="eleve"]    { border-left-color: var(--warn); }
+.panel--risk[data-level="critique"] { border-left-color: var(--danger); }
+
+.risk-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+
+.risk-gauge {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.risk-score { font-family: var(--mono); font-size: 30px; font-weight: 700; line-height: 1; }
+.risk-max { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.panel--risk[data-level="faible"]   .risk-score { color: var(--ok); }
+.panel--risk[data-level="modere"]   .risk-score { color: var(--info); }
+.panel--risk[data-level="eleve"]    .risk-score { color: var(--warn); }
+.panel--risk[data-level="critique"] .risk-score { color: var(--danger); }
+
+.risk-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.risk-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--mono);
+}
+.risk-summary { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+.risk-reasons { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.risk-reasons li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.risk-reasons .reason-basis { font-size: 11px; color: var(--text-dim); font-style: italic; grid-column: 1; }
+.risk-reasons .reason-points {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warn);
+  grid-row: 1;
+  grid-column: 2;
+  white-space: nowrap;
+}
+.risk-reasons .empty { grid-column: 1 / -1; }
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.risk-badge--faible   { border-color: var(--ok);     background: var(--ok-soft);     color: var(--ok); }
+.risk-badge--modere   { border-color: var(--info);   background: var(--info-soft);   color: var(--info); }
+.risk-badge--eleve    { border-color: var(--warn);   background: var(--warn-soft);   color: var(--warn); }
+.risk-badge--critique { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 
 .callout {
   border-radius: var(--radius-lg);

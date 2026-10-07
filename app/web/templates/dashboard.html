@@ -28,6 +28,30 @@
   </article>
 </section>
 
+<section class="panel panel--summary">
+  <header class="panel-head">
+    <h2 class="panel-title">Résumé de la session</h2>
+    <div class="panel-actions">
+      <span class="panel-hint" id="summary-source">—</span>
+      <button class="btn btn--ghost btn--small" type="button" id="btn-summary">Actualiser</button>
+    </div>
+  </header>
+  <p class="summary-text" id="summary-text">
+    Aucun résumé pour l'instant. Démarrez une capture, puis actualisez.
+  </p>
+  <p class="summary-guardrail" id="summary-guardrail" hidden></p>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">État des services</h2>
+    <span class="panel-hint">ce qui fonctionne, et ce qui ne répond pas</span>
+  </header>
+  <div class="services" id="services-state">
+    <p class="empty">Vérification en cours…</p>
+  </div>
+</section>
+
 <div class="grid grid--2">
 
   <section class="panel">

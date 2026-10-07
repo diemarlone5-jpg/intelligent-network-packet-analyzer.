@@ -254,6 +254,36 @@ class TestBaseDeConnaissance:
         assert classify_address("pas-une-ip") == "inconnu"
 
 
+class TestDetectionDesAdressesLocales:
+    """Sans reconnaissance des IPv6, une communication SORTANTE peut etre prise
+    pour une connexion ENTRANTE, ce qui fausse le sens et le niveau de risque."""
+
+    def test_ipv6_locale_reconnue(self):
+        from app.analysis.parser import PacketParser
+        parser = PacketParser(local_ips={"2001:42d8:379d:e500:c892:3484:1e87:3d2"})
+        assert parser.is_local("2001:42d8:379d:e500:c892:3484:1e87:3d2") is True
+        assert parser.is_local("2001:67c:4e8:f004::9") is False
+
+    def test_ipv6_equivalente_ecrite_autrement(self):
+        """Une meme adresse IPv6 s'ecrit de plusieurs facons : 2001:db8::1
+        et 2001:0db8:0000:0000:0000:0000:0000:0001 sont identiques."""
+        from app.analysis.parser import PacketParser
+        parser = PacketParser(local_ips={"2001:db8::1"})
+        assert parser.is_local("2001:0db8:0000:0000:0000:0000:0000:0001") is True
+
+    def test_suffixe_de_zone_ignore(self):
+        from app.analysis.parser import PacketParser
+        parser = PacketParser(local_ips={"fe80::1"})
+        assert parser.is_local("fe80::1%12") is True
+
+    def test_ipv4_inchangee(self):
+        from app.analysis.parser import PacketParser
+        parser = PacketParser(local_ips={"192.168.1.10"})
+        assert parser.is_local("192.168.1.10") is True
+        assert parser.is_local("192.168.1.11") is False
+        assert parser.is_local(None) is False
+
+
 # ==========================================================================
 # 4. Moteur d'explication
 # ==========================================================================

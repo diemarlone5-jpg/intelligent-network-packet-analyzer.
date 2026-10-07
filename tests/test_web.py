@@ -25,6 +25,7 @@ PAGES_ATTENDUES = [
     ("/packets", "Paquets capturés"),
     ("/flows", "Communications"),
     ("/events", "Événements détectés"),
+    ("/protocols", "Base de connaissance réseau"),
     ("/history", "Historique"),
     ("/about", "Comprendre l'application"),
 ]
@@ -210,6 +211,39 @@ class TestAPI:
         assert donnees["ok"] is True
         assert donnees["sessions"] == []
         assert donnees["session"] is None
+
+    def test_base_de_connaissance_exposee(self, client):
+        """La page Protocoles doit pouvoir etre verifiee sans lire le code."""
+        donnees = client.get("/api/protocols").json()
+        assert donnees["ok"] is True
+        services = {entree["service"] for entree in donnees["ports"]}
+        assert "HTTPS" in services
+        assert "DNS" in services
+        # Chaque entree porte sa justification et son niveau de confiance
+        for entree in donnees["ports"]:
+            assert entree["why"]
+            assert entree["confidence"] in ("haute", "moyenne", "faible")
+        assert donnees["transports"]
+        assert donnees["tcp_flags"]
+        assert donnees["scopes"]
+
+    def test_etat_des_dependances(self, client):
+        donnees = client.get("/api/dependencies").json()
+        assert donnees["ok"] is True
+        assert donnees["base_locale"]["disponible"] is True
+        assert donnees["supabase"]["active"] is False
+        assert donnees["capture"]["disponible"] is False   # mode consultation
+        assert "role" in donnees["supabase"]
+
+    def test_resume_de_session(self, client):
+        """Le resume doit fonctionner sans aucune cle d'API configuree."""
+        donnees = client.get("/api/summary").json()
+        assert donnees["ok"] is True
+        resume = donnees["summary"]
+        assert resume["provider"] == "regles"
+        assert resume["guardrails"]["verifie"] is True
+        assert resume["text"]
+        assert resume["fallback"] is False
 
     def test_limites_de_pagination_validees(self, client):
         """Les entrees invalides doivent etre refusees, pas ignorees."""
