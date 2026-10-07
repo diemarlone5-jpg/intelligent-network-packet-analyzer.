@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Historique — Packet Analyzer{% endblock %}
+{% block heading %}Historique des analyses{% endblock %}
+{% block subheading %}Ce qui a été conservé en base, pour être consulté après la capture.{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <label class="field">
+    <span class="field-label">Session</span>
+    <select id="session-select" class="input input--select">
+      <option value="">Chargement…</option>
+    </select>
+  </label>
+  <p class="toolbar-note" id="history-count">—</p>
+</section>
+
+<div class="grid grid--2">
+  <section class="panel">
+    <header class="panel-head"><h2 class="panel-title">Résumé de la session</h2></header>
+    <dl class="kv" id="session-summary">
+      <div class="kv-row"><dt>—</dt><dd>Aucune session enregistrée pour l'instant.</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head"><h2 class="panel-title">Événements conservés</h2></header>
+    <div id="history-events" class="events">
+      <p class="empty">Aucun événement enregistré.</p>
+    </div>
+  </section>
+</div>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Communications enregistrées</h2>
+    <span class="panel-hint">reconstruites depuis la base</span>
+  </header>
+  <div class="table-wrap">
+    <table class="table table--dense">
+      <thead>
+        <tr>
+          <th scope="col">Hôte local</th>
+          <th scope="col">Hôte distant</th>
+          <th scope="col">Port</th>
+          <th scope="col">Protocole</th>
+          <th scope="col">Domaines</th>
+          <th scope="col">Paquets</th>
+          <th scope="col">Volume</th>
+          <th scope="col">Lecture enregistrée</th>
+        </tr>
+      </thead>
+      <tbody id="history-flows">
+        <tr><td colspan="8" class="empty">Aucune donnée enregistrée.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--info">
+  <h3>Pourquoi conserver ces données ?</h3>
+  <p>
+    Une analyse réseau n'a de valeur que si elle peut être rejouée. L'historique
+    conserve les <strong>communications</strong> (l'unité qui a du sens), les
+    <strong>événements</strong> détectés avec leurs preuves, et un
+    <strong>échantillon</strong> de paquets bruts plafonné par session — jamais
+    l'intégralité du trafic.
+  </p>
+</div>
+
+{% endblock %}

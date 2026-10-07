@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Événements — Packet Analyzer{% endblock %}
+{% block heading %}Événements détectés{% endblock %}
+{% block subheading %}Comportements qui méritent l'attention — jamais présentés comme des attaques.{% endblock %}
+
+{% block content %}
+
+<div class="legend" role="note">
+  <div class="legend-item">
+    <span class="kind kind--observation">OBSERVATION</span>
+    <span>un fait mesuré, indiscutable</span>
+  </div>
+  <div class="legend-item">
+    <span class="kind kind--hypothese">HYPOTHÈSE</span>
+    <span>une lecture probable de ce fait</span>
+  </div>
+  <div class="legend-item">
+    <span class="kind kind--alerte">ALERTE</span>
+    <span>une exposition documentée et vérifiable</span>
+  </div>
+</div>
+
+<section class="toolbar">
+  <label class="field">
+    <span class="field-label">Filtrer</span>
+    <select id="event-kind-filter" class="input input--select">
+      <option value="">tous les types</option>
+      <option value="OBSERVATION">Observations</option>
+      <option value="HYPOTHESE">Hypothèses</option>
+      <option value="ALERTE">Alertes</option>
+    </select>
+  </label>
+  <p class="toolbar-note" id="event-count">—</p>
+</section>
+
+<section id="event-list" class="events events--full">
+  <p class="empty">Aucun événement détecté pour l'instant.</p>
+</section>
+
+{% endblock %}

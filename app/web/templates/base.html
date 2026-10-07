@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Analyseur de paquets reseau{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip-link" href="#contenu">Aller au contenu principal</a>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28">
+          <circle cx="6" cy="16" r="3"></circle>
+          <circle cx="26" cy="8" r="3"></circle>
+          <circle cx="26" cy="24" r="3"></circle>
+          <line x1="9" y1="15" x2="23" y2="9"></line>
+          <line x1="9" y1="17" x2="23" y2="23"></line>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <strong>Packet Analyzer</strong>
+        <small>capturer &middot; analyser &middot; expliquer</small>
+      </span>
+    </a>
+
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/" class="nav-item {% if active == 'dashboard' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">▤</span> Tableau de bord
+      </a>
+      <a href="/packets" class="nav-item {% if active == 'packets' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">≣</span> Paquets
+      </a>
+      <a href="/flows" class="nav-item {% if active == 'flows' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">⇄</span> Communications
+      </a>
+      <a href="/events" class="nav-item {% if active == 'events' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">⚑</span> Événements
+      </a>
+      <a href="/history" class="nav-item {% if active == 'history' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">⟲</span> Historique
+      </a>
+      <a href="/about" class="nav-item {% if active == 'about' %}is-active{% endif %}">
+        <span class="nav-icon" aria-hidden="true">?</span> Comprendre
+      </a>
+      <a href="/api/docs" class="nav-item nav-item--muted" target="_blank" rel="noopener">
+        <span class="nav-icon" aria-hidden="true">↗</span> API
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="mode-chip mode-chip--{{ app_mode }}">
+        {% if is_local_mode %}Mode local — capture active{% else %}Mode consultation{% endif %}
+      </div>
+      <p class="sidebar-note">
+        Chaque conclusion est séparée en <strong>fait observé</strong> et
+        <strong>interprétation</strong>.
+      </p>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">{% block heading %}Tableau de bord{% endblock %}</h1>
+        <p class="page-sub">{% block subheading %}{% endblock %}</p>
+      </div>
+
+      <div class="topbar-right">
+        <button id="theme-toggle" class="btn btn--ghost btn--small" type="button"
+                aria-pressed="false" aria-label="Basculer entre thème sombre et clair"
+                title="Basculer le thème">◐</button>
+
+        <span class="status-pill" id="capture-status" data-state="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="capture-status-text">Capture arrêtée</span>
+        </span>
+
+        {% if is_local_mode %}
+        <div class="control-group">
+          <label class="visually-hidden" for="iface-select">Interface réseau</label>
+          <select id="iface-select" class="input input--select">
+            <option value="">Chargement…</option>
+          </select>
+
+          <label class="visually-hidden" for="bpf-filter">Filtre de capture</label>
+          <input id="bpf-filter" class="input" type="text" placeholder="filtre (ex. tcp port 443)"
+                 autocomplete="off" spellcheck="false">
+
+          <button id="btn-start" class="btn btn--primary" type="button">Démarrer</button>
+          <button id="btn-stop" class="btn btn--danger" type="button" disabled>Arrêter</button>
+          <button id="btn-reset" class="btn btn--ghost" type="button">Vider</button>
+        </div>
+        {% else %}
+        <p class="mode-hint">
+          La capture réseau n'est possible que sur la machine locale.
+          Cette instance consulte l'historique enregistré.
+        </p>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if config_problems %}
+    <div class="banner banner--warning" role="status">
+      <strong>Configuration à corriger :</strong>
+      <ul>{% for problem in config_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
+
+    <main id="contenu" class="content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <span>Intelligent Network Packet Analyzer — sprint Python 3</span>
+      <span class="footer-sep">·</span>
+      <span>Analyse fondée uniquement sur les paquets réellement observés</span>
+    </footer>
+  </div>
+</div>
+
+<script src="/static/js/app.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — Packet Analyzer{% endblock %}
+{% block heading %}Tableau de bord{% endblock %}
+{% block subheading %}Vue d'ensemble du trafic observé et des événements détectés.{% endblock %}
+
+{% block content %}
+
+<section class="cards" aria-label="Indicateurs principaux">
+  <article class="card">
+    <span class="card-label">Paquets observés</span>
+    <span class="card-value" id="stat-packets">0</span>
+    <span class="card-note">depuis le début de la capture</span>
+  </article>
+  <article class="card">
+    <span class="card-label">Communications</span>
+    <span class="card-value" id="stat-flows">0</span>
+    <span class="card-note"><span id="stat-active">0</span> encore actives</span>
+  </article>
+  <article class="card">
+    <span class="card-label">Volume échangé</span>
+    <span class="card-value" id="stat-bytes">0 o</span>
+    <span class="card-note">toutes communications confondues</span>
+  </article>
+  <article class="card card--accent">
+    <span class="card-label">Événements</span>
+    <span class="card-value" id="stat-events">0</span>
+    <span class="card-note" id="stat-events-note">aucun pour l'instant</span>
+  </article>
+</section>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Protocoles observés</h2>
+      <span class="panel-hint">proportion des paquets</span>
+    </header>
+    <div id="protocol-chart" class="chart">
+      <p class="empty">Aucune donnée : démarrez une capture pour observer le trafic.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Ports les plus utilisés</h2>
+      <span class="panel-hint">port de service contacté</span>
+    </header>
+    <div id="port-chart" class="chart">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </section>
+
+</div>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Principales sources</h2>
+      <span class="panel-hint">qui émet le plus de paquets</span>
+    </header>
+    <ul id="top-sources" class="list"><li class="empty">Aucune donnée.</li></ul>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Principales destinations</h2>
+      <span class="panel-hint">vers qui le trafic se dirige</span>
+    </header>
+    <ul id="top-destinations" class="list"><li class="empty">Aucune donnée.</li></ul>
+  </section>
+
+</div>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Événements récents</h2>
+    <a class="panel-link" href="/events">tout voir</a>
+  </header>
+  <div id="recent-events" class="events">
+    <p class="empty">Aucun événement détecté pour l'instant.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Derniers paquets capturés</h2>
+    <a class="panel-link" href="/packets">tout voir</a>
+  </header>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">N°</th>
+          <th scope="col">Source</th>
+          <th scope="col">Destination</th>
+          <th scope="col">Protocole</th>
+          <th scope="col">Drapeaux</th>
+          <th scope="col">Taille</th>
+          <th scope="col">Résumé</th>
+        </tr>
+      </thead>
+      <tbody id="recent-packets">
+        <tr><td colspan="7" class="empty">Aucun paquet capturé pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}

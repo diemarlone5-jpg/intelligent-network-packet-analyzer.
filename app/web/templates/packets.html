@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Paquets — Packet Analyzer{% endblock %}
+{% block heading %}Paquets capturés{% endblock %}
+{% block subheading %}Chaque ligne est un paquet réellement observé, sans interprétation.{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <label class="field">
+    <span class="field-label">Rechercher</span>
+    <input id="packet-search" class="input" type="search"
+           placeholder="adresse IP, domaine ou drapeau TCP" autocomplete="off">
+  </label>
+
+  <label class="field">
+    <span class="field-label">Protocole</span>
+    <select id="packet-protocol" class="input input--select">
+      <option value="">tous</option>
+      <option value="TCP">TCP</option>
+      <option value="UDP">UDP</option>
+      <option value="TLS">TLS</option>
+      <option value="DNS">DNS</option>
+      <option value="HTTP">HTTP</option>
+      <option value="ICMP">ICMP</option>
+      <option value="ARP">ARP</option>
+    </select>
+  </label>
+
+  <p class="toolbar-note" id="packet-count">—</p>
+</section>
+
+<section class="panel">
+  <div class="table-wrap">
+    <table class="table table--dense">
+      <thead>
+        <tr>
+          <th scope="col">N°</th>
+          <th scope="col">Instant</th>
+          <th scope="col">Source</th>
+          <th scope="col">Destination</th>
+          <th scope="col">Protocole</th>
+          <th scope="col">Drapeaux</th>
+          <th scope="col">TTL</th>
+          <th scope="col">Taille</th>
+          <th scope="col">Résumé</th>
+        </tr>
+      </thead>
+      <tbody id="packet-rows">
+        <tr><td colspan="9" class="empty">Aucun paquet capturé pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--info">
+  <h3>Comment lire cette liste</h3>
+  <p>
+    Cette page ne montre que des <strong>faits observés</strong> : qui, vers qui, quel
+    protocole, quelle taille, quels drapeaux. Pour obtenir le sens de ces
+    observations, ouvrez la page <a href="/flows">Communications</a>.
+  </p>
+</div>
+
+{% endblock %}

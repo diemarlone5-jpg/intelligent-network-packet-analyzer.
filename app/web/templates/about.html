@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Comprendre — Packet Analyzer{% endblock %}
+{% block heading %}Comprendre l'application{% endblock %}
+{% block subheading %}Ce que fait ce système, comment il fonctionne, et ce qu'il ne sait pas faire.{% endblock %}
+
+{% block content %}
+
+<section class="panel">
+  <h2 class="panel-title">Le problème que cet outil résout</h2>
+  <p class="lead">
+    Les analyseurs de trafic classiques affichent des informations techniques
+    brutes : une adresse, un port, des drapeaux. Pour quelqu'un qui débute, voir
+    <code>TCP 192.168.1.15:52341 → 142.x.x.x:443 [SYN]</code> ne permet pas de
+    comprendre ce qui se passe réellement.
+  </p>
+  <p>
+    Ce système fait le travail inverse : il part des paquets réellement observés
+    et produit une explication en langage courant, en distinguant toujours ce qui
+    a été <strong>mesuré</strong> de ce qui a été <strong>déduit</strong>.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Le trajet d'une donnée</h2>
+  <ol class="pipeline">
+    <li><strong>Capturer</strong> — Scapy ouvre l'interface réseau via le pilote Npcap et reçoit les paquets.</li>
+    <li><strong>Analyser</strong> — chaque paquet est traduit en champs plats : adresses, ports, drapeaux, taille, horodatage.</li>
+    <li><strong>Regrouper</strong> — les paquets d'une même conversation sont réunis sous une identité commune, et son état est suivi.</li>
+    <li><strong>Comprendre</strong> — les ports, protocoles et drapeaux sont confrontés à une base de connaissance.</li>
+    <li><strong>Expliquer</strong> — un texte humain est produit, séparant faits, interprétations et réserves.</li>
+    <li><strong>Détecter</strong> — des règles comptent les comportements qui méritent l'attention.</li>
+    <li><strong>Enrichir</strong> — une API externe ajoute le pays, l'opérateur et le réseau d'une adresse.</li>
+    <li><strong>Conserver</strong> — SQLite en local, Supabase en ligne, pour rejouer une analyse plus tard.</li>
+  </ol>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Fait observé, interprétation, alerte</h2>
+  <p>
+    C'est la règle de conception centrale. Une observation n'est jamais présentée
+    comme une conclusion.
+  </p>
+  <div class="compare">
+    <div class="compare-col">
+      <h3><span class="kind kind--observation">OBSERVATION</span></h3>
+      <p>« Le port de destination est 443. »</p>
+      <p class="muted">Mesurable dans le paquet. Personne ne peut le contester.</p>
+    </div>
+    <div class="compare-col">
+      <h3><span class="kind kind--hypothese">INTERPRÉTATION</span></h3>
+      <p>« Le port 443 est généralement associé à HTTPS. »</p>
+      <p class="muted">Une convention d'usage, avec un niveau de confiance affiché.</p>
+    </div>
+    <div class="compare-col">
+      <h3><span class="kind kind--alerte">ALERTE</span></h3>
+      <p>« Un service sensible accepte des connexions. »</p>
+      <p class="muted">Une exposition documentée et vérifiable, pas une supposition.</p>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">L'API externe, et pourquoi celle-là</h2>
+  <dl class="kv">
+    <div class="kv-row"><dt>Service retenu</dt><dd><strong>ipwho.is</strong>, avec <strong>ip-api.com</strong> en secours</dd></div>
+    <div class="kv-row"><dt>Pourquoi</dt><dd>HTTPS natif, aucune clé d'API requise, réponse JSON exploitable, quota suffisant.</dd></div>
+    <div class="kv-row"><dt>Ce que nous envoyons</dt><dd>Uniquement l'adresse IP distante déjà observée. Jamais le contenu d'un paquet.</dd></div>
+    <div class="kv-row"><dt>Ce que nous recevons</dt><dd>Pays, ville, opérateur, organisation, numéro de système autonome.</dd></div>
+    <div class="kv-row"><dt>Ce que nous en faisons</dt><dd>Ces éléments sont ajoutés aux <em>faits</em> et marqués comme provenant d'une source externe. Ils ne servent jamais à déduire une intention : le pays d'une adresse ne prouve rien.</dd></div>
+    <div class="kv-row"><dt>Adresses privées</dt><dd>Aucun appel externe : leur nature est déterminée localement.</dd></div>
+  </dl>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Comment les données sont organisées</h2>
+  <dl class="kv">
+    <div class="kv-row"><dt><code>capture_sessions</code></dt><dd>Une ligne par campagne d'observation. Sans elle, impossible de comparer deux analyses ou de savoir quand une communication a été vue.</dd></div>
+    <div class="kv-row"><dt><code>flows</code></dt><dd>Une ligne par communication, pas par paquet. C'est l'unité qui a du sens pour un analyste, et cela divise le volume stocké par plusieurs milliers.</dd></div>
+    <div class="kv-row"><dt><code>events</code></dt><dd>Une ligne par fait remarquable, avec ses preuves chiffrées. Permet de rejouer une détection.</dd></div>
+    <div class="kv-row"><dt><code>packets</code></dt><dd>Un échantillon plafonné de paquets bruts, pour la vérification et la démonstration.</dd></div>
+    <div class="kv-row"><dt><code>ip_intel</code></dt><dd>Cache de l'enrichissement : une adresse n'est interrogée qu'une fois par période de validité.</dd></div>
+  </dl>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Ce que cette application ne sait pas faire</h2>
+  <ul class="caveats">
+    <li>Elle ne déchiffre rien. Le contenu d'une session TLS reste illisible ; seuls le volume, le rythme et parfois le nom du serveur (SNI) sont observables.</li>
+    <li>Elle n'analyse que ce qui passe devant la carte réseau choisie. Le trafic entre deux autres machines n'est pas visible depuis un poste classique.</li>
+    <li>Elle ne conserve pas le contenu des paquets : l'analyse ne porte que sur les en-têtes et ce que le client annonce en clair.</li>
+    <li>Un port est une convention, pas une preuve. Un service peut écouter sur n'importe quel port.</li>
+    <li>Une anomalie statistique n'est pas une attaque. Chaque règle de détection affiche ses chiffres pour que l'utilisateur juge lui-même.</li>
+    <li>La détection de retransmissions repose sur la comparaison des numéros de séquence : c'est une approximation, pas une analyse fine de la fenêtre TCP.</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Environnement de cette instance</h2>
+  <dl class="kv">
+    <div class="kv-row"><dt>Mode</dt><dd>{{ app_mode }}</dd></div>
+    <div class="kv-row"><dt>Adresse locale principale</dt><dd><code>{{ primary_address or 'indéterminée' }}</code></dd></div>
+    <div class="kv-row"><dt>Interfaces détectées</dt><dd>{{ interfaces | length }}</dd></div>
+  </dl>
+  <div class="table-wrap">
+    <table class="table table--dense">
+      <thead>
+        <tr><th scope="col">Nom</th><th scope="col">Adresse</th><th scope="col">Type</th></tr>
+      </thead>
+      <tbody>
+        {% for iface in interfaces %}
+        <tr>
+          <td>{{ iface.name }}</td>
+          <td><code>{{ iface.addresses | join(', ') or '—' }}</code></td>
+          <td>
+            {% if iface.is_loopback %}Boucle locale
+            {% elif iface.is_virtual %}Carte virtuelle
+            {% else %}Carte physique{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--warning">
+  <h3>Autorisation</h3>
+  <p>
+    Cet outil n'observe que le trafic de la machine sur laquelle il est lancé.
+    Toute capture doit être effectuée dans un environnement où vous y êtes
+    autorisé — sur votre propre poste, ou sur un réseau dont vous avez la
+    responsabilité.
+  </p>
+</div>
+
+{% endblock %}

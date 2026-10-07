@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Erreur {{ code }} — Packet Analyzer{% endblock %}
+{% block heading %}Erreur {{ code }}{% endblock %}
+
+{% block content %}
+<section class="panel panel--narrow">
+  <h2 class="panel-title">{{ title }}</h2>
+  <p class="lead">{{ message }}</p>
+  {% if detail %}<p class="muted">{{ detail }}</p>{% endif %}
+
+  <div class="actions">
+    <a class="btn btn--primary" href="/">Revenir au tableau de bord</a>
+    <a class="btn btn--ghost" href="/about">Comprendre l'application</a>
+  </div>
+
+  <div class="callout callout--info">
+    <p>
+      L'application ne montre jamais de trace technique : les détails d'une
+      erreur sont écrits dans le journal du serveur, pas dans la page.
+    </p>
+  </div>
+</section>
+{% endblock %}

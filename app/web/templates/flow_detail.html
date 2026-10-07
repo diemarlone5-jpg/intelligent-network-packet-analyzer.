@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Analyse d'une communication — Packet Analyzer{% endblock %}
+{% block heading %}Analyse d'une communication{% endblock %}
+{% block subheading %}Informations techniques, puis explication en langage humain.{% endblock %}
+
+{% block content %}
+
+<div id="detail-loading" class="panel"><p class="empty">Chargement de l'analyse…</p></div>
+
+<div id="detail-error" class="panel" hidden>
+  <h2 class="panel-title">Communication indisponible</h2>
+  <p id="detail-error-text" class="lead"></p>
+  <div class="actions">
+    <a class="btn btn--primary" href="/flows">Revenir aux communications</a>
+  </div>
+</div>
+
+<div id="detail-root" hidden data-flow-key="{{ flow_key }}">
+
+  <section class="panel panel--headline">
+    <div class="headline-row">
+      <div>
+        <p class="eyebrow">Lecture proposée</p>
+        <h2 class="headline" id="detail-headline">—</h2>
+      </div>
+      <div class="confidence" id="detail-confidence">
+        <span class="confidence-label">Confiance</span>
+        <span class="confidence-value" id="detail-confidence-value">—</span>
+      </div>
+    </div>
+    <p class="plain-text" id="detail-plain-text"></p>
+  </section>
+
+  <div class="grid grid--2">
+
+    <section class="panel">
+      <header class="panel-head">
+        <h2 class="panel-title">Informations techniques</h2>
+        <span class="panel-hint">ce qui a été mesuré</span>
+      </header>
+      <dl class="kv" id="detail-technical"></dl>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head">
+        <h2 class="panel-title">État de la communication</h2>
+        <span class="panel-hint">suivi des étapes TCP</span>
+      </header>
+      <dl class="kv" id="detail-state"></dl>
+    </section>
+
+  </div>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Faits observés</h2>
+      <span class="panel-hint">aucune interprétation dans cette section</span>
+    </header>
+    <ul class="facts" id="detail-facts"></ul>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Interprétations</h2>
+      <span class="panel-hint">chaque lecture est rattachée à sa justification</span>
+    </header>
+    <ol class="interps" id="detail-interps"></ol>
+  </section>
+
+  <section class="panel panel--enrich">
+    <header class="panel-head">
+      <h2 class="panel-title">Enrichissement externe</h2>
+      <button class="btn btn--ghost btn--small" type="button" id="btn-enrich">
+        Interroger la source externe
+      </button>
+    </header>
+    <div id="detail-intel"><p class="empty">Aucune donnée externe chargée pour l'instant.</p></div>
+  </section>
+
+  <section class="panel panel--caveats">
+    <header class="panel-head">
+      <h2 class="panel-title">Ce que cette analyse ne permet pas de conclure</h2>
+    </header>
+    <ul class="caveats" id="detail-caveats"></ul>
+  </section>
+
+</div>
+
+{% endblock %}

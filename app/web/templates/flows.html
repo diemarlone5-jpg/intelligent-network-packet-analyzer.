@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Communications — Packet Analyzer{% endblock %}
+{% block heading %}Communications{% endblock %}
+{% block subheading %}Paquets regroupés en conversations : qui parle à qui, combien de temps, et dans quel état.{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <label class="field field--inline">
+    <input id="flows-active-only" type="checkbox" class="checkbox">
+    <span>N'afficher que les communications actives</span>
+  </label>
+  <p class="toolbar-note" id="flow-count">—</p>
+</section>
+
+<section class="panel">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Hôte local</th>
+          <th scope="col">Hôte distant</th>
+          <th scope="col">Service</th>
+          <th scope="col">Protocole</th>
+          <th scope="col">État</th>
+          <th scope="col">Paquets</th>
+          <th scope="col">Volume</th>
+          <th scope="col">Durée</th>
+          <th scope="col">Lecture</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody id="flow-rows">
+        <tr><td colspan="10" class="empty">Aucune communication observée pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--info">
+  <h3>Ce qu'est une communication</h3>
+  <p>
+    Un paquet isolé ne raconte rien. L'application regroupe les paquets qui
+    appartiennent à la même conversation — même protocole, mêmes deux machines,
+    mêmes deux ports — puis suit l'état de cette conversation à partir des
+    drapeaux réellement observés (ouverture, établissement, fermeture, refus).
+  </p>
+</div>
+
+{% endblock %}

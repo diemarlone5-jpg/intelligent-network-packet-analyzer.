@@ -1,0 +1,40 @@
+# Deploiement Render — https://render.com
+#
+# L'application en ligne fonctionne en mode CONSULTATION : elle lit
+# l'historique enregistre dans Supabase. La capture reseau reste locale.
+#
+# Variables a definir dans le tableau de bord Render (jamais dans ce fichier) :
+#   SECRET_KEY              valeur aleatoire de 64 caracteres
+#   SUPABASE_URL            https://<projet>.supabase.co
+#   SUPABASE_SERVICE_KEY    cle service_role (secret)
+#   SUPABASE_ENABLED        true
+#   APP_MODE                cloud
+#   ENRICH_ENABLED          true
+
+services:
+  - type: web
+    name: packet-analyzer
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/status
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: APP_MODE
+        value: cloud
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        generateValue: true          # genere une valeur aleatoire au premier deploiement
+      - key: SUPABASE_ENABLED
+        value: "false"               # a passer a true une fois les cles renseignees
+      - key: ENRICH_ENABLED
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false                  # a saisir manuellement (secret)
+      - key: SUPABASE_SERVICE_KEY
+        sync: false                  # a saisir manuellement (secret)

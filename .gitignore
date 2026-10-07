@@ -1,0 +1,30 @@
+# --- Secrets : ne JAMAIS commiter ---
+.env
+.env.local
+.env.prod
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# --- Donnees locales generees ---
+data/*.db
+data/*.db-journal
+data/*.sqlite
+data/*.sqlite3
+data/captures/
+*.pcap
+*.pcapng
+
+# --- Editeurs / OS ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# Journaux d execution
+*.log

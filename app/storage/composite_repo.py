@@ -1,0 +1,129 @@
+"""Depot combine : ecrit en local ET dans Supabase, lit la source disponible.
+
+Pourquoi cette couche existe :
+    - la capture doit continuer a fonctionner meme si Internet tombe ou si le
+      quota de Supabase est atteint ;
+    - une donnee ecrite en local est immediatement exploitable, sans attendre
+      le reseau ;
+    - le mode en ligne alimente la demonstration depuis Supabase.
+
+Regle de lecture : Supabase est prioritaire s'il repond, sinon SQLite. Le
+fichier local reste ainsi la source de secours, jamais une source perimee.
+"""
+
+from __future__ import annotations
+
+import time
+
+from app.models import Event, Flow, IPIntel, PacketRecord
+from app.storage.base import Repository
+
+
+class CompositeRepository(Repository):
+    """Ecrit dans les deux depots, lit celui qui est disponible."""
+
+    def __init__(self, local: Repository, remote: Repository) -> None:
+        self.local = local
+        self.remote = remote
+        self.remote_available = True
+        self.last_error: str | None = None
+
+    # ------------------------------------------------------------------
+    def _try_remote(self, action, *args, **kwargs):
+        """Execute une operation distante sans jamais propager d'erreur."""
+        if not self.remote_available:
+            return None
+        try:
+            return action(*args, **kwargs)
+        except Exception as exc:
+            self.remote_available = False
+            self.last_error = (
+                f"Supabase n'est plus joignable ({type(exc).__name__}) : "
+                f"l'application continue uniquement en local."
+            )
+            return None
+
+    def _recheck_remote(self) -> None:
+        """Reessaie le distant toutes les 60 secondes apres un echec."""
+        if self.remote_available:
+            return
+        now = time.time()
+        if now - getattr(self, "_last_recheck", 0.0) < 60.0:
+            return
+        self._last_recheck = now
+        try:
+            if self.remote.ping():  # type: ignore[attr-defined]
+                self.remote_available = True
+                self.last_error = None
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    def init_schema(self) -> None:
+        self.local.init_schema()
+        self._try_remote(self.remote.init_schema)
+
+    def ping(self) -> bool:
+        return self.local.ping()
+
+    def record_warning(self, message: str) -> None:
+        self.local.record_warning(message)
+
+    # ------------------------------------------------------------------
+    def create_session(self, **kwargs) -> int:
+        session_id = self.local.create_session(**kwargs)
+        self._try_remote(self.remote.create_session, **kwargs)
+        return session_id
+
+    def close_session(self, session_id: int, **kwargs) -> None:
+        self.local.close_session(session_id, **kwargs)
+        self._try_remote(self.remote.close_session, session_id, **kwargs)
+
+    def list_sessions(self, limit: int = 50) -> list[dict]:
+        self._recheck_remote()
+        remote = self._try_remote(self.remote.list_sessions, limit) if self.remote_available else None
+        return remote if remote else self.local.list_sessions(limit)
+
+    def get_session(self, session_id: int) -> dict | None:
+        self._recheck_remote()
+        remote = self._try_remote(self.remote.get_session, session_id) if self.remote_available else None
+        return remote if remote else self.local.get_session(session_id)
+
+    # ------------------------------------------------------------------
+    def save_flows(self, session_id: int, flows: list[Flow]) -> None:
+        self.local.save_flows(session_id, flows)
+        self._try_remote(self.remote.save_flows, session_id, flows)
+
+    def list_flows(self, session_id: int | None = None, limit: int = 500) -> list[dict]:
+        self._recheck_remote()
+        remote = self._try_remote(self.remote.list_flows, session_id, limit) if self.remote_available else None
+        return remote if remote else self.local.list_flows(session_id, limit)
+
+    def save_events(self, session_id: int, events: list[Event]) -> None:
+        self.local.save_events(session_id, events)
+        self._try_remote(self.remote.save_events, session_id, events)
+
+    def list_events(self, session_id: int | None = None, limit: int = 300) -> list[dict]:
+        self._recheck_remote()
+        remote = self._try_remote(self.remote.list_events, session_id, limit) if self.remote_available else None
+        return remote if remote else self.local.list_events(session_id, limit)
+
+    def save_packets(self, session_id: int, records: list[PacketRecord]) -> None:
+        self.local.save_packets(session_id, records)
+        self._try_remote(self.remote.save_packets, session_id, records)
+
+    def list_packets(self, session_id: int | None = None, limit: int = 200) -> list[dict]:
+        self._recheck_remote()
+        remote = self._try_remote(self.remote.list_packets, session_id, limit) if self.remote_available else None
+        return remote if remote else self.local.list_packets(session_id, limit)
+
+    # ------------------------------------------------------------------
+    def get_intel(self, ip: str, max_age_hours: float) -> IPIntel | None:
+        local = self.local.get_intel(ip, max_age_hours)
+        if local is not None:
+            return local
+        return self._try_remote(self.remote.get_intel, ip, max_age_hours) if self.remote_available else None
+
+    def save_intel(self, intel: IPIntel) -> None:
+        self.local.save_intel(intel)
+        self._try_remote(self.remote.save_intel, intel)
