@@ -26,6 +26,25 @@ templates.env.filters["scope"] = describe_scope
 router = APIRouter()
 
 
+def _asset_fingerprint() -> str:
+    """Empreinte des fichiers statiques, pour forcer leur rechargement.
+
+    Sans cela, le navigateur continue de servir l'ancienne feuille de style ou
+    l'ancien script apres une modification : on croit avoir corrige un bug qui
+    est toujours actif a l'ecran. L'empreinte change des qu'un fichier change.
+    """
+    newest = 0.0
+    for relative in ("static/css/style.css", "static/js/app.js"):
+        try:
+            newest = max(newest, (BASE_DIR / "app" / "web" / relative).stat().st_mtime)
+        except OSError:
+            continue
+    return str(int(newest)) or "1"
+
+
+ASSET_VERSION = _asset_fingerprint()
+
+
 def base_context(request: Request) -> dict:
     """Contexte commun a toutes les pages."""
     settings = request.app.state.settings
@@ -37,6 +56,7 @@ def base_context(request: Request) -> dict:
         "is_local_mode": settings.is_local,
         "theme": theme if theme in ("dark", "light") else "dark",
         "config_problems": request.app.state.config_problems,
+        "asset_version": ASSET_VERSION,
         "now": time.time(),
     }
 

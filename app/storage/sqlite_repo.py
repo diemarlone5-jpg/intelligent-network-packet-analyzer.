@@ -197,6 +197,17 @@ class SqliteRepository(Repository):
             "SELECT * FROM capture_sessions ORDER BY started_at DESC LIMIT ?", (limit,)
         )
 
+    def close_orphan_sessions(self, note: str) -> int:
+        """Cloture les sessions laissees ouvertes par un arret non propre."""
+        with self._lock:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    "UPDATE capture_sessions SET stopped_at = ?, note = ? "
+                    "WHERE stopped_at IS NULL",
+                    (time.time(), note),
+                )
+                return int(cursor.rowcount)
+
     def get_session(self, session_id: int) -> dict | None:
         rows = self._query("SELECT * FROM capture_sessions WHERE id = ?", (session_id,))
         return rows[0] if rows else None

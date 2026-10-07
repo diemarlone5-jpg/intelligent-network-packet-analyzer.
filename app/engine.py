@@ -85,6 +85,21 @@ class AnalyzerEngine:
         """Demarre le fil d'analyse en arriere-plan."""
         if self._thread and self._thread.is_alive():
             return
+
+        # Une session laissee ouverte par un arret brutal (coupure, processus
+        # tue) resterait eternellement « en cours » dans l'historique. On la
+        # cloture au demarrage, avec une note expliquant pourquoi.
+        try:
+            closed = self.repo.close_orphan_sessions(
+                "interrompue : l'application ne s'est pas arretee proprement"
+            )
+            if closed:
+                self._record_error(
+                    f"{closed} session(s) precedemment interrompue(s) ont ete cloturees."
+                )
+        except Exception as exc:
+            self._record_error(f"Cloture des sessions orphelines impossible : {type(exc).__name__}")
+
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._analysis_loop,
                                         name="analyzer-engine", daemon=True)

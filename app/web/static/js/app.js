@@ -860,18 +860,28 @@
         return;
       }
 
-      replace(summary, [
+      // Une session non clôturée n'a pas encore de totaux : les afficher a zero
+      // laisserait croire qu'aucun paquet n'a ete capture.
+      var enCours = !session.stopped_at;
+      var total = function (value) { return enCours ? "en cours" : value; };
+
+      var lignes = [
         kvRow("Session", "#" + session.id),
         kvRow("Démarrée le", fmtDateTime(session.started_at)),
         kvRow("Terminée le", session.stopped_at ? fmtDateTime(session.stopped_at) : "en cours"),
         kvRow("Mode", session.mode),
         kvRow("Interface", session.interface_name || session.interface),
         kvRow("Filtre de capture", session.filter || "aucun"),
-        kvRow("Paquets", session.packets),
-        kvRow("Volume", fmtBytes(session.bytes_total)),
-        kvRow("Communications", session.flows_count),
-        kvRow("Événements", session.events_count)
-      ]);
+        kvRow("Paquets (total de la session)", total(session.packets)),
+        kvRow("Volume (total de la session)", total(fmtBytes(session.bytes_total))),
+        kvRow("Communications enregistrées", (data.flows || []).length),
+        kvRow("Événements enregistrés", (data.events || []).length)
+      ];
+      // La note explique pourquoi une session s'est terminee : sans elle, une
+      // session interrompue ressemble a une capture qui a echoue.
+      if (session.note) lignes.push(kvRow("Note", session.note));
+
+      replace(summary, lignes);
 
       var flows = data.flows || [];
       replace(flowsBody, flows.length ? flows.map(function (flow) {
@@ -914,11 +924,16 @@
             select.append(h("option", { value: "", text: "aucune session enregistrée" }));
           } else {
             sessions.forEach(function (session) {
+              // Le nombre de paquets d'une session n'est ecrit qu'a sa cloture :
+              // afficher « 0 paquets » pour une capture en cours serait faux.
+              var detail = session.stopped_at
+                ? (session.packets || 0) + " paquets"
+                : "en cours";
               select.append(h("option", {
                 value: String(session.id),
                 text: "#" + session.id + " — " + fmtDateTime(session.started_at) +
                       " (" + (session.interface_name || session.interface || "interface inconnue") +
-                      ") — " + (session.packets || 0) + " paquets"
+                      ") — " + detail
               }));
             });
             if (data.session) select.value = String(data.session.id);

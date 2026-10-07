@@ -93,6 +93,13 @@ class TestPages:
         assert client.get("/static/js/app.js").status_code == 200
         assert client.get("/static/img/favicon.svg").status_code == 200
 
+    def test_empreinte_de_version_sur_les_ressources(self, client):
+        """Sans empreinte, le navigateur sert l'ancien script apres une
+        modification et l'on croit avoir corrige un bug toujours actif."""
+        texte = client.get("/").text
+        assert "style.css?v=" in texte
+        assert "app.js?v=" in texte
+
     def test_documentation_api_disponible(self, client):
         assert client.get("/api/docs").status_code == 200
         assert client.get("/api/openapi.json").status_code == 200

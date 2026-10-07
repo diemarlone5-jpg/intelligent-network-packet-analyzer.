@@ -58,6 +58,16 @@ class Repository(ABC):
         """Cloture une session en y inscrivant ses totaux."""
 
     @abstractmethod
+    def close_orphan_sessions(self, note: str) -> int:
+        """Cloture les sessions restees ouvertes apres un arret non propre.
+
+        Sans cela, une session interrompue par une coupure de courant ou un
+        arret force reste eternellement « en cours » dans l'historique, et
+        affiche des totaux a zero qui laissent croire qu'aucun paquet n'a ete
+        capture. Retourne le nombre de sessions cloturees.
+        """
+
+    @abstractmethod
     def list_sessions(self, limit: int = 50) -> list[dict]:
         """Historique des sessions, la plus recente en premier."""
 

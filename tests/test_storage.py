@@ -53,6 +53,23 @@ class TestSessions:
     def test_session_inexistante(self, repo):
         assert repo.get_session(9999) is None
 
+    def test_cloture_des_sessions_orphelines(self, repo):
+        """Une session laissee ouverte par un arret brutal ne doit pas rester
+        eternellement « en cours » dans l'historique."""
+        premiere = repo.create_session(mode="local", interface="x", interface_name="Wi-Fi")
+        seconde = repo.create_session(mode="local", interface="x", interface_name="Wi-Fi")
+        repo.close_session(seconde, packets=10, bytes_total=100, flows=1, events=0)
+
+        fermees = repo.close_orphan_sessions("interrompue par un arret force")
+        assert fermees == 1                       # seule la premiere etait ouverte
+
+        assert repo.get_session(premiere)["stopped_at"] is not None
+        assert "arret force" in repo.get_session(premiere)["note"]
+        assert repo.get_session(seconde)["packets"] == 10   # la deuxieme est intacte
+
+    def test_cloture_orpheline_sans_rien_a_faire(self, repo):
+        assert repo.close_orphan_sessions("rien") == 0
+
     def test_liste_vide_au_depart(self, repo):
         assert repo.list_sessions() == []
 

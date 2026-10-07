@@ -84,6 +84,11 @@ class CompositeRepository(Repository):
         remote = self._try_remote(self.remote.list_sessions, limit) if self.remote_available else None
         return remote if remote else self.local.list_sessions(limit)
 
+    def close_orphan_sessions(self, note: str) -> int:
+        fermees = self.local.close_orphan_sessions(note)
+        self._try_remote(self.remote.close_orphan_sessions, note)
+        return fermees
+
     def get_session(self, session_id: int) -> dict | None:
         self._recheck_remote()
         remote = self._try_remote(self.remote.get_session, session_id) if self.remote_available else None

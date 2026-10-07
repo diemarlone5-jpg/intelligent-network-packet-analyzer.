@@ -141,6 +141,21 @@ class SupabaseRepository(Repository):
             "select": "*", "order": "started_at.desc", "limit": limit,
         }) or []
 
+    def close_orphan_sessions(self, note: str) -> int:
+        """Cloture les sessions distantes restees ouvertes."""
+        try:
+            response = self._client.patch(
+                f"{self.base}/{TABLE_SESSIONS}",
+                params={"stopped_at": "is.null"},
+                content=json.dumps({"stopped_at": time.time(), "note": note}),
+                headers=self._headers({"Prefer": "return=representation"}),
+            )
+            if response.status_code < 400:
+                return len(response.json() or [])
+        except Exception as exc:
+            self.last_error = f"Cloture des sessions orphelines impossible ({type(exc).__name__})"
+        return 0
+
     def get_session(self, session_id: int) -> dict | None:
         rows = self._get(TABLE_SESSIONS, {"select": "*", "id": f"eq.{session_id}"})
         return rows[0] if rows else None
