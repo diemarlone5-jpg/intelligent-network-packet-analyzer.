@@ -24,7 +24,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from app.analysis.flows import infer_direction, resolve_service_port
-from app.analysis.protocols import classify_address, lookup_port
+from app.analysis.protocols import classify_address, is_translation_prefix, lookup_port
 from app.models import (
     KIND_ALERTE,
     KIND_HYPOTHESE,
@@ -54,6 +54,10 @@ class DetectionConfig:
     # ce soit. On exige donc un minimum de matiere avant de comparer.
     volume_min_flows: int = 5
     volume_min_bytes: int = 50_000
+    # Avec peu d'interlocuteurs, "concentre 90 % du volume" n'apprend rien :
+    # c'est le cas normal d'une conversation unique et volumineuse. La regle
+    # n'a de sens que s'il y a une vraie diversite de destinations.
+    volume_min_remote_hosts: int = 4
     beacon_min_series: int = 5         # connexions regulieres = balise possible
     beacon_jitter: float = 0.30        # dispersion relative toleree
     baseline_factor: float = 3.0       # ecart au comportement habituel
@@ -227,6 +231,14 @@ class BehaviorAnalyzer:
             port = resolve_service_port(f)
             info = lookup_port(port, f.transport)
             if not info or not info.sensitive:
+                continue
+
+            # Un service contacte en diffusion (SSDP, mDNS, LLMNR) n'est pas un
+            # service expose : c'est un mecanisme de decouverte, present sur
+            # presque tous les reseaux domestiques. Le presenter comme une
+            # alerte serait un cri au loup, exactement ce que le cahier des
+            # charges interdit. On ignore donc ces cas ici.
+            if classify_address(f.dst) == "multicast" or classify_address(f.src) == "multicast":
                 continue
 
             inbound = infer_direction(f, self.is_local) == "distant"
@@ -416,7 +428,17 @@ class BehaviorAnalyzer:
         for f in flows:
             by_remote[f.distant()] += f.bytes_total
 
+        if len(by_remote) < self.config.volume_min_remote_hosts:
+            return []
+
         top, top_bytes = by_remote.most_common(1)[0]
+
+        # Un prefixe de traduction (NAT64, 6to4) represente des dizaines de
+        # destinations reelles : dire « cet hote concentre 97 % du trafic »
+        # serait faux et trompeur pour l'utilisateur.
+        if is_translation_prefix(top):
+            return []
+
         share = top_bytes / total
         if share < self.config.volume_share:
             return []

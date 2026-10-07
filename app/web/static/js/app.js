@@ -176,7 +176,7 @@
     }
 
     function loadInterfaces() {
-      api("/api/interfaces").then(function (data) {
+      return api("/api/interfaces").then(function (data) {
         clear(ifaceSelect);
         if (!data.interfaces.length) {
           ifaceSelect.append(h("option", { value: "", text: "Aucune interface détectée" }));
@@ -194,6 +194,30 @@
       });
     }
 
+    /* L'etat affiche doit venir du SERVEUR, jamais d'une supposition locale.
+       Sinon une capture reellement en cours peut apparaitre comme arretee, et
+       une erreur passagere comme une panne definitive. */
+    function refreshState(selectInterface) {
+      return api("/api/stats").then(function (data) {
+        var capture = data.capture || {};
+        if (capture.running) {
+          setState("running", "Capture en cours");
+          if (selectInterface && capture.interface_id && ifaceSelect) {
+            var match = Array.prototype.find.call(
+              ifaceSelect.options,
+              function (option) { return option.value === capture.interface_id; }
+            );
+            if (match) ifaceSelect.value = match.value;
+          }
+        } else {
+          setState("idle", "Capture arrêtée");
+        }
+        return capture;
+      }).catch(function () {
+        setState("idle", "État indisponible");
+      });
+    }
+
     startBtn.addEventListener("click", function () {
       startBtn.disabled = true;
       api("/api/capture/start", {
@@ -204,20 +228,25 @@
         setState("running", "Capture en cours");
         if (window.__pkaRefresh) window.__pkaRefresh();
       }).catch(function (error) {
+        // Un echec peut simplement signifier qu'une capture tourne deja :
+        // on interroge le serveur avant d'afficher une quelconque panne.
         flash(error.message, "error");
-        setState("error", "Capture impossible");
-        startBtn.disabled = false;
+        refreshState(true).then(function (capture) {
+          if (window.__pkaRefresh) window.__pkaRefresh();
+        });
       });
     });
 
     if (stopBtn) {
       stopBtn.addEventListener("click", function () {
+        stopBtn.disabled = true;
         api("/api/capture/stop", { method: "POST" })
           .then(function (data) {
             flash(data.message, "ok");
             setState("idle", "Capture arrêtée");
           })
-          .catch(function (error) { flash(error.message, "error"); });
+          .catch(function (error) { flash(error.message, "error"); })
+          .finally(function () { refreshState(); });
       });
     }
 
@@ -233,23 +262,14 @@
       });
     }
 
-    loadInterfaces();
+    // On attend d'avoir la liste des interfaces avant de refleter l'etat, pour
+    // pouvoir y selectionner celle qui capture reellement.
+    loadInterfaces().then(function () { refreshState(true); });
 
-    // Etat initial : l'application peut avoir ete lancee avec une capture deja
-    // en cours (ou avoir redemarre). On interroge le serveur au lieu de supposer.
-    api("/api/stats").then(function (data) {
-      if (data.capture && data.capture.running) {
-        setState("running", "Capture en cours");
-        if (data.capture.interface) {
-          var match = Array.prototype.find.call(
-            ifaceSelect.options, function (option) { return option.value === data.capture.interface_id; }
-          );
-          if (match) ifaceSelect.value = match.value;
-        }
-      } else {
-        setState("idle", "Capture arrêtée");
-      }
-    }).catch(function () { setState("idle", "Capture arrêtée"); });
+    // Rafraichissement periodique : la capture peut avoir ete arretee depuis un
+    // autre onglet, ou s'etre interrompue toute seule. La fonction est enveloppee
+    // car setInterval lui transmettrait sinon l'identifiant du minuteur.
+    setInterval(function () { refreshState(false); }, 5000);
 
     return { setState: setState };
   }
@@ -820,6 +840,7 @@
     var eventsBox = $("#history-events");
     var summary = $("#session-summary");
     var counter = $("#history-count");
+    var sessionsLoaded = false;
 
     function kvRow(label, value) {
       return h("div", { class: "kv-row" }, [
@@ -881,15 +902,27 @@
     function load(sessionId) {
       var path = "/api/history" + (sessionId ? "?session_id=" + encodeURIComponent(sessionId) : "");
       api(path).then(function (data) {
-        if (!select.options.length) {
-          (data.sessions || []).forEach(function (session) {
-            select.append(h("option", {
-              value: String(session.id),
-              text: "#" + session.id + " — " + fmtDateTime(session.started_at) +
-                    " (" + (session.interface_name || session.interface || "interface inconnue") + ")"
-            }));
-          });
-          if (data.session) select.value = String(data.session.id);
+        // Le gabarit contient deja une option « Chargement… » : tester la
+        // longueur de la liste ne suffit donc jamais a detecter le premier
+        // remplissage. On utilise un drapeau explicite.
+        if (!sessionsLoaded) {
+          sessionsLoaded = true;
+          clear(select);
+
+          var sessions = data.sessions || [];
+          if (!sessions.length) {
+            select.append(h("option", { value: "", text: "aucune session enregistrée" }));
+          } else {
+            sessions.forEach(function (session) {
+              select.append(h("option", {
+                value: String(session.id),
+                text: "#" + session.id + " — " + fmtDateTime(session.started_at) +
+                      " (" + (session.interface_name || session.interface || "interface inconnue") +
+                      ") — " + (session.packets || 0) + " paquets"
+              }));
+            });
+            if (data.session) select.value = String(data.session.id);
+          }
         }
         render(data);
       }).catch(function (error) { counter.textContent = "Erreur : " + error.message; });

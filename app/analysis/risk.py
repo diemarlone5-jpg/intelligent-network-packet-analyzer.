@@ -142,7 +142,8 @@ def assess_flow(flow: Flow, is_local) -> RiskAssessment:
             ))
 
     # --- entrant depuis Internet -------------------------------------------
-    if direction == "distant" and distant_scope == "public":
+    # Un prefixe de traduction (NAT64) est lui aussi hors du reseau local.
+    if direction == "distant" and distant_scope in ("public", "traduction"):
         reasons.append(RiskReason(
             fact=f"connexion entrante depuis une adresse publique ({flow.distant()})",
             points=POINTS_ENTRANT_PUBLIC,
@@ -150,7 +151,7 @@ def assess_flow(flow: Flow, is_local) -> RiskAssessment:
         ))
 
     # --- volume vers un hote non identifie ---------------------------------
-    if (flow.bytes_total > 500_000 and distant_scope == "public"
+    if (flow.bytes_total > 500_000 and distant_scope in ("public", "traduction")
             and not flow.domain and flow.app_protocol != "DNS"):
         reasons.append(RiskReason(
             fact=f"{flow.bytes_total} octets echangees avec {flow.distant()}, non identifie",

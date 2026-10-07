@@ -601,8 +601,44 @@ SCOPE_LABELS = {
     "multicast": "adresse de diffusion groupee",
     "lien-local": "adresse locale automatique (aucun serveur DHCP n'a repondu)",
     "reserve": "plage reservee ou non attribuee",
+    "traduction": "prefixe de traduction (plusieurs destinations reelles derriere)",
     "inconnu": "nature indeterminee",
 }
+
+# Prefixes de transition IPv6 : ils ne designent PAS une machine unique mais
+# une passerelle derriere laquelle se trouvent de nombreuses destinations.
+# Les prendre pour un hote ferait dire a l'analyse « un serveur concentre 97 %
+# du trafic » alors qu'il s'agit en realite de dizaines de serveurs distincts.
+TRANSLATION_NETWORKS = (
+    "64:ff9b::/96",       # NAT64 (RFC 6052)
+    "64:ff9b:1::/48",     # NAT64 local (RFC 8215)
+    "2002::/16",          # 6to4 (RFC 3056)
+    "2001::/32",          # Teredo (RFC 4380)
+    "::ffff:0:0/96",      # IPv4-mapped
+)
+
+
+def is_translation_prefix(ip: str | None) -> bool:
+    """L'adresse est-elle un prefixe de traduction IPv6 ?
+
+    Ce n'est pas un hote : c'est une passerelle. La distinguer evite des
+    conclusions trompeuses sur « l'hote qui concentre le trafic ».
+    """
+    if not ip or ":" not in ip:
+        return False
+    import ipaddress as _ipaddress
+
+    try:
+        address = _ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for network in TRANSLATION_NETWORKS:
+        try:
+            if address in _ipaddress.ip_network(network):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def classify_address(ip: str | None) -> str:
@@ -613,6 +649,10 @@ def classify_address(ip: str | None) -> str:
     """
     if not ip:
         return "inconnu"
+
+    if is_translation_prefix(ip):
+        return "traduction"
+
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:

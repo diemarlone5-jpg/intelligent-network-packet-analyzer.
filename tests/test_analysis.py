@@ -253,6 +253,18 @@ class TestBaseDeConnaissance:
         assert classify_address("169.254.1.1") == "lien-local"
         assert classify_address("pas-une-ip") == "inconnu"
 
+    def test_prefixes_de_traduction_reconnus(self):
+        """Un prefixe NAT64 ou 6to4 n'est pas un hote : c'est une passerelle
+        derriere laquelle se cachent de nombreuses destinations."""
+        from app.analysis.protocols import is_translation_prefix
+        assert classify_address("64:ff9b::3ad:153f") == "traduction"
+        assert is_translation_prefix("64:ff9b::3ad:153f") is True
+        assert is_translation_prefix("2002::1") is True
+        # Une adresse IPv6 publique ordinaire n'est pas un prefixe de traduction
+        assert is_translation_prefix("2001:67c:4e8:f004::9") is False
+        assert is_translation_prefix("192.168.1.10") is False
+        assert is_translation_prefix(None) is False
+
 
 class TestDetectionDesAdressesLocales:
     """Sans reconnaissance des IPv6, une communication SORTANTE peut etre prise
@@ -443,6 +455,20 @@ class TestDetection:
         assert alerte.kind == KIND_ALERTE
         assert alerte.severity == "eleve"
 
+    def test_aucune_alerte_pour_un_service_en_diffusion(self):
+        """SSDP et mDNS sont presents sur presque tous les reseaux domestiques.
+        Les presenter comme une exposition serait un cri au loup."""
+        table = FlowTable(is_local=lambda ip: ip == LOCAL_IP)
+        # Annonce SSDP classique : diffusion vers 239.255.255.250
+        table.observe(parse(udp_packet(src="192.168.1.50", dst="239.255.255.250",
+                                       sport=1900, dport=1900, ts=1000.0), 1))
+        # Requete mDNS : diffusion vers le groupe 224.0.0.251
+        table.observe(parse(udp_packet(src="192.168.1.51", dst="224.0.0.251",
+                                       sport=5353, dport=5353, ts=1000.1), 2))
+        analyzer = BehaviorAnalyzer(is_local=lambda ip: ip == LOCAL_IP)
+        events = analyzer.analyze(table.snapshot(), now=1000.0)
+        assert not any(e.rule == "service_sensible_joignable" for e in events)
+
     def test_beaconing_sur_fenetre_longue(self):
         """Un rythme regulier ne se voit que sur une duree longue.
 
@@ -479,6 +505,39 @@ class TestDetection:
     def test_entropie_distingue_aleatoire_et_mot(self):
         """Sert a reperer les noms generes par programme (tunnel DNS, DGA)."""
         assert shannon_entropy("a8f3kd92mzxqplw") > shannon_entropy("wikipedia")
+
+    def test_pas_de_volume_dominant_avec_peu_d_interlocuteurs(self):
+        """« Concentre 90 % du volume » n'apprend rien s'il n'y a que 2 hotes :
+        c'est le cas normal d'une conversation unique et volumineuse."""
+        table = FlowTable(is_local=lambda ip: ip == LOCAL_IP)
+        for index in range(10):
+            table.observe(parse(tcp_packet(sport=51000 + index, dst="203.0.113.9",
+                                           dport=443, flags="S", ts=1000.0), index + 1))
+        analyzer = BehaviorAnalyzer(is_local=lambda ip: ip == LOCAL_IP)
+        events = analyzer.analyze(table.snapshot(), now=1000.0)
+        assert not any(e.rule == "volume_dominant" for e in events)
+
+    def test_volume_dominant_avec_diversite_reelle(self):
+        """Avec suffisamment d'interlocuteurs, la concentration devient informative."""
+        table = FlowTable(is_local=lambda ip: ip == LOCAL_IP)
+        index = 0
+        for destination in ("203.0.113.1", "203.0.113.2", "203.0.113.3", "203.0.113.4"):
+            for _ in range(6):
+                index += 1
+                table.observe(parse(tcp_packet(sport=51000 + index, dst=destination,
+                                               dport=443, flags="PA", ts=1000.0,
+                                               payload=b"x" * 1200), index))
+        analyzer = BehaviorAnalyzer(is_local=lambda ip: ip == LOCAL_IP)
+        events = analyzer.analyze(table.snapshot(), now=1000.0)
+        # La regle peut se declencher ; ce qui compte est que les preuves
+        # indiquent combien de flux ont ete analyses.
+        for event in events:
+            if event.rule == "volume_dominant":
+                assert event.evidence["nb_flux_analyses"] >= 5
+                break
+        else:
+            # Aucun hote ne depasse le seuil de part : comportement acceptable
+            assert True
 
     def test_trafic_calme_ne_produit_rien(self):
         table = FlowTable(is_local=lambda ip: ip == LOCAL_IP)

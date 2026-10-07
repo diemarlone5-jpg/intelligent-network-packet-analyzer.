@@ -13,7 +13,7 @@ from typing import Callable
 
 from scapy.all import AsyncSniffer, conf
 
-from app.capture.interfaces import capture_available, find_interface
+from app.capture.interfaces import capture_available, find_interface, pick_default_interface
 
 
 class CaptureAgent:
@@ -54,12 +54,23 @@ class CaptureAgent:
                 self.last_error = message
                 return False, message
 
-            target = find_interface(iface_id) if iface_id else None
+            if iface_id:
+                target = find_interface(iface_id)
+            else:
+                # Aucune interface imposee : on utilise la meme logique de choix
+                # que le reste de l'application (carte portant la route par
+                # defaut). Se fier au defaut de Scapy peut mener a capturer sur
+                # un adaptateur virtuel ou deconnecte.
+                target = pick_default_interface()
+
             # `conf.iface` peut renvoyer un OBJET interface Scapy et non une
-            # chaine. Cet objet n'est ni serialisable en JSON, ni acceptable par
-            # SQLite : on le convertit explicitement en identifiant technique.
-            target_id = str(target.id) if target else str(iface_id or conf.iface)
-            target_name = str(target.name) if target else str(iface_name or target_id)
+            # chaine, et un identifiant technique n'est pas un nom lisible.
+            # On resout donc toujours vers un identifiant ET un nom d'affichage.
+            if target is not None:
+                target_id, target_name = str(target.id), str(target.name)
+            else:
+                target_id = str(iface_id or conf.iface)
+                target_name = str(iface_name or target_id)
 
             if not target_id:
                 self.last_error = "Aucune interface de capture n'a pu etre determinee."
