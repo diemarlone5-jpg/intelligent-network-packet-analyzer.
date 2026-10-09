@@ -144,6 +144,29 @@
     window.location.href = "/packet?number=" + numero;
   }
 
+  /* La source externe renvoie deja « AS16509 ». Prefixer sans verifier donnait
+     « ASAS16509 » : on normalise au lieu de concatener. */
+  function fmtAsn(asn) {
+    if (!asn) return "—";
+    var texte = String(asn).trim().toUpperCase();
+    if (!texte) return "—";
+    return texte.indexOf("AS") === 0 ? texte : "AS" + texte;
+  }
+
+  /* Cellule d'adresse : la largeur est bornee et le texte se termine par des
+     points de suspension quand il ne tient pas. C'est le comportement des
+     colonnes de Wireshark, et la valeur complete reste accessible au survol
+     ainsi que dans le detail du paquet. Une colonne non bornee rendrait le
+     tableau plus large que l'ecran et obligerait a defiler pour lire. */
+  function endpointCell(host, port, extraClass) {
+    var texte = endpoint(host, port);
+    return h("td", {
+      class: "mono endpoint " + (extraClass || ""),
+      text: texte,
+      title: texte
+    });
+  }
+
   /* Ligne du tableau des paquets. Cliquable et pilotable au clavier : ouvrir le
      detail d'un paquet est l'action principale de cette page. */
   function packetTableRow(record) {
@@ -154,12 +177,12 @@
     }, [
       h("td", { class: "mono num", text: String(record.number) }),
       h("td", { class: "mono instant", text: fmtClock(record.ts) }),
-      h("td", { class: "mono endpoint", text: endpoint(record.src, record.src_port) }),
-      h("td", { class: "mono endpoint", text: endpoint(record.dst, record.dst_port) }),
+      endpointCell(record.src, record.src_port),
+      endpointCell(record.dst, record.dst_port),
       h("td", null, badgeFor(record.protocol)),
       h("td", { class: "mono num", text: (record.size || 0) + " o" }),
-      h("td", { class: "mono", text: geoText(record, "country") }),
-      h("td", { class: "geo-org", text: geoText(record, "org") }),
+      h("td", { class: "mono pays", text: geoText(record, "country") }),
+      h("td", { class: "org", text: geoText(record, "org"), title: geoText(record, "org") }),
       h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
     ]);
 
@@ -686,16 +709,27 @@
             text: "Analyser"
           });
           return h("tr", null, [
-            h("td", { class: "mono", text: flow.observer }),
-            h("td", { class: "mono", text: flow.distant }),
-            h("td", null, flow.service
-              ? h("span", { class: flow.service_sensitive ? "badge badge--risk" : "badge", text: flow.service })
-              : h("span", { class: "mono", text: flow.service_port === null ? "—" : String(flow.service_port) })),
-            h("td", null, badgeFor(flow.app_protocol || flow.transport)),
+            endpointCell(flow.observer, null),
+            endpointCell(flow.distant, flow.distant_port),
+            // Service et protocole dans une seule cellule : deux colonnes pour
+            // deux informations courtes elargissaient le tableau sans rien
+            // apporter a la lecture.
+            h("td", null, [
+              flow.service
+                ? h("span", { class: flow.service_sensitive ? "badge badge--risk" : "badge",
+                              text: flow.service,
+                              title: flow.service_port === null ? "" : "port " + flow.service_port })
+                : h("span", { class: "mono", text: flow.service_port === null ? "—" : String(flow.service_port) }),
+              h("span", { class: "cell-sep", text: " " }),
+              badgeFor(flow.app_protocol || flow.transport)
+            ]),
             h("td", null, h("span", { class: stateClass(flow.state), text: flow.state_label || flow.state })),
-            h("td", { class: "mono num", text: String(flow.packets) }),
-            h("td", { class: "mono num", text: fmtBytes(flow.bytes_total) }),
-            h("td", { class: "mono", text: fmtDuration(flow.duration) }),
+            // Paquets et volume reunis : ils decrivent la meme chose, l'ampleur
+            // de l'echange.
+            h("td", { class: "mono num trafic",
+                      text: String(flow.packets) + " · " + fmtBytes(flow.bytes_total),
+                      title: String(flow.packets) + " paquets, " + fmtBytes(flow.bytes_total)
+                             + ", duree " + fmtDuration(flow.duration) }),
             h("td", {
               text: flow.domain ? flow.domain : (flow.direction === "local" ? "sortant" : flow.direction === "distant" ? "entrant" : "indéterminé"),
               title: flow.domain || ""
@@ -703,7 +737,7 @@
             h("td", null, riskBadge(flow.risk)),
             h("td", null, link)
           ]);
-        }) : emptyRow(11, "Aucune communication observée pour l'instant."));
+        }) : emptyRow(8, "Aucune communication observée pour l'instant."));
       }).catch(function (error) {
         counter.textContent = "Erreur : " + error.message;
       });
@@ -1323,7 +1357,7 @@
             h("td", { text: adresse.country || "—" }),
             h("td", { text: adresse.city || "—" }),
             h("td", { class: "geo-org", text: adresse.org || adresse.isp || "—" }),
-            h("td", { class: "mono", text: adresse.asn ? "AS" + adresse.asn : "—" }),
+            h("td", { class: "mono", text: adresse.asn ? fmtAsn(adresse.asn) : "—" }),
             h("td", { class: "mono num", text: String(adresse.packets || 0) })
           ]);
         }) : emptyRow(6, "Aucune adresse distante identifiee pour l'instant."));
@@ -1366,16 +1400,25 @@
             });
           }) : "—";
 
+          var adresses = (appareil.addresses || [appareil.ip]);
+          var cellulesAdresses = adresses.map(function (a) {
+            return h("div", { class: "mono", text: a });
+          });
+          if (appareil.hostname) {
+            cellulesAdresses.push(h("div", { class: "hostname", text: appareil.hostname }));
+          }
+          if (appareil.is_local) {
+            cellulesAdresses.push(h("div", { class: "hostname", text: "cette machine" }));
+          }
+
           return h("tr", null, [
-            h("td", { class: "mono endpoint",
-                      text: (appareil.addresses || [appareil.ip]).join("  ") + (appareil.is_local ? "   (cette machine)" : "") }),
+            h("td", { class: "addresses" }, cellulesAdresses),
             h("td", { class: "mono", text: appareil.mac || "inconnue" }),
-            h("td", { text: appareil.hostname || "—" }),
             h("td", { class: "mono num", text: String(appareil.packets || 0) }),
             h("td", null, contenu),
             h("td", { class: "mono instant", text: fmtClock(appareil.last_seen) })
           ]);
-        }) : emptyRow(6, "Aucun appareil observé pour l'instant. Démarrez une capture."));
+        }) : emptyRow(5, "Aucun appareil observé pour l'instant. Démarrez une capture."));
 
         replace($("#net-services"), services.length ? services.map(function (service) {
           var sens = service.announced && service.searched ? "annoncé et recherché"

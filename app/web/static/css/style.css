@@ -533,14 +533,15 @@ code, .mono {
 
 .table-wrap { overflow-x: auto; margin: 0 -20px -18px; padding: 0 20px 4px; }
 
-/* `min-width: max-content` est indispensable avec des cellules qui ne se
-   replient pas : sans lui, le tableau se comprime pour tenir dans la largeur
-   disponible, les valeurs techniques debordent les unes sur les autres, et le
-   nombre de colonnes visibles diminue. Avec lui, le tableau prend sa largeur
-   naturelle et le conteneur le fait defiler horizontalement si besoin. */
+/* Le tableau occupe exactement la largeur disponible : `width: 100%` et rien
+   de plus. Une version precedente portait `min-width: max-content` pour
+   empecher les colonnes de s'ecraser, mais cela forcait le tableau a sa largeur
+   naturelle — donc plus large que l'ecran des qu'une adresse IPv6 apparaissait,
+   et il fallait defiler pour lire la premiere colonne. Les cellules techniques
+   sont desormais bornees et se terminent par des points de suspension, ce qui
+   rend `max-content` inutile. */
 .table {
   width: 100%;
-  min-width: max-content;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -586,15 +587,57 @@ code, .mono {
    aussi verticalement, ce qui rend la lecture par colonne possible. */
 .table td.num { min-width: 58px; }
 
-/* Adresses et ports : un couple adresse:port IPv6 est long, et le tronquer
-   rendrait l'information fausse a la lecture. La marge droite supplementaire
-   garantit qu'une adresse longue ne colle pas a la colonne suivante. */
-.table td.endpoint { min-width: 210px; padding-right: 22px; }
+/* Adresses et ports : la largeur est BORNEE. Une adresse IPv6 fait jusqu'a 45
+   caracteres ; deux colonnes non bornees suffisaient a rendre le tableau plus
+   large que l'ecran et a obliger a defiler pour lire les premieres colonnes.
+   Le texte trop long se termine par des points de suspension — jamais par une
+   adresse fausse — et la valeur complete reste dans l'infobulle et dans le
+   detail du paquet. C'est le comportement des colonnes de Wireshark. */
+.table td.endpoint {
+  min-width: 150px;
+  max-width: 190px;
+  padding-right: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
+/* Colonne de pays : les noms courts doivent tenir sur une ligne. */
+.table td.pays {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Colonne d'organisation : elle ne doit pas elargir le tableau a l'infini
+   quand un nom d'operateur est long. */
+.table td.geo-org,
+.table td.org {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cellule qui contient plusieurs adresses (page Reseau local) : elle se replie
+   proprement au lieu d'allonger le tableau. */
+.table td.addresses {
+  white-space: normal;
+  min-width: 190px;
+  max-width: 240px;
+  overflow-wrap: anywhere;
+}
+.table td.addresses .hostname { color: var(--text-dim); font-size: 11.5px; }
+
+/* Colonne « Trafic » : paquets et volume reunis. */
+.table td.trafic { white-space: nowrap; min-width: 96px; }
+
+/* Espacement entre deux etiquettes collees dans une meme cellule. */
+.cell-sep { display: inline-block; width: 4px; }
 .table td.summary-cell {
   white-space: normal;
-  min-width: 240px;
-  max-width: 460px;
+  min-width: 200px;
+  max-width: 420px;
   color: var(--text-muted);
 }
 .table tbody tr:hover td { background: var(--surface-2); }
