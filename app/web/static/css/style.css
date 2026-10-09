@@ -533,7 +533,17 @@ code, .mono {
 
 .table-wrap { overflow-x: auto; margin: 0 -20px -18px; padding: 0 20px 4px; }
 
-.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* `min-width: max-content` est indispensable avec des cellules qui ne se
+   replient pas : sans lui, le tableau se comprime pour tenir dans la largeur
+   disponible, les valeurs techniques debordent les unes sur les autres, et le
+   nombre de colonnes visibles diminue. Avec lui, le tableau prend sa largeur
+   naturelle et le conteneur le fait defiler horizontalement si besoin. */
+.table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 13px;
+}
 .table th {
   text-align: left;
   font-size: 11px;
@@ -552,6 +562,40 @@ code, .mono {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: middle;
+}
+/* Une adresse IP, un horodatage ou un port ne doivent JAMAIS se couper en
+   deux : « 12:40:24.515 » affiche sur deux lignes fait doubler la hauteur de
+   chaque ligne et rend le tableau illisible. Les cellules techniques ne se
+   replient donc pas ; c'est la colonne de resume qui absorbe la place.
+
+   Les largeurs minimales ci-dessous sont explicites et volontairement en
+   pixels. `min-width: max-content` a ete essaye d'abord : le moteur ne
+   l'applique pas aux cellules de tableau, et l'algorithme dimensionne la
+   colonne d'apres la longueur de son EN-TETE, pas d'apres les donnees.
+   « INSTANT » est court, « 12:44:16.092 » ne l'est pas, et le texte debordait
+   donc sur la colonne voisine. */
+.table td.mono,
+.table td.num,
+.table td.nowrap { white-space: nowrap; }
+
+/* Horodatage : 12 caracteres en chasse fixe, plus la marge interne. */
+.table td.instant { min-width: 118px; }
+
+/* Colonnes numeriques : sans largeur minimale, la marge interne est rognee et
+   les valeurs courtes (« 54 o », « 128 ») collent au bord. Cela les aligne
+   aussi verticalement, ce qui rend la lecture par colonne possible. */
+.table td.num { min-width: 58px; }
+
+/* Adresses et ports : un couple adresse:port IPv6 est long, et le tronquer
+   rendrait l'information fausse a la lecture. La marge droite supplementaire
+   garantit qu'une adresse longue ne colle pas a la colonne suivante. */
+.table td.endpoint { min-width: 210px; padding-right: 22px; }
+
+.table td.summary-cell {
+  white-space: normal;
+  min-width: 240px;
+  max-width: 460px;
+  color: var(--text-muted);
 }
 .table tbody tr:hover td { background: var(--surface-2); }
 .table--dense td, .table--dense th { padding: 6px 9px; font-size: 12.5px; }

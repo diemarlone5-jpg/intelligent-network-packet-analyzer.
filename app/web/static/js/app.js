@@ -430,13 +430,13 @@
 
     function packetRow(record) {
       return h("tr", null, [
-        h("td", { class: "mono", text: String(record.number) }),
-        h("td", { class: "mono", text: endpoint(record.src, record.src_port) }),
-        h("td", { class: "mono", text: endpoint(record.dst, record.dst_port) }),
+        h("td", { class: "mono num", text: String(record.number) }),
+        h("td", { class: "mono endpoint", text: endpoint(record.src, record.src_port) }),
+        h("td", { class: "mono endpoint", text: endpoint(record.dst, record.dst_port) }),
         h("td", null, badgeFor(record.protocol)),
         h("td", { class: "mono", text: record.tcp_flags || "—" }),
-        h("td", { class: "mono", text: record.size + " o" }),
-        h("td", { text: record.info || "" })
+        h("td", { class: "mono num", text: record.size + " o" }),
+        h("td", { class: "summary-cell", text: record.info || "" })
       ]);
     }
 
@@ -560,15 +560,15 @@
         counter.textContent = records.length + " paquet(s) affiché(s)";
         replace(body, records.length ? records.map(function (record) {
           return h("tr", null, [
-            h("td", { class: "mono", text: String(record.number) }),
-            h("td", { class: "mono", text: fmtClock(record.ts) }),
-            h("td", { class: "mono", text: endpoint(record.src, record.src_port) }),
-            h("td", { class: "mono", text: endpoint(record.dst, record.dst_port) }),
+            h("td", { class: "mono num", text: String(record.number) }),
+            h("td", { class: "mono instant", text: fmtClock(record.ts) }),
+            h("td", { class: "mono endpoint", text: endpoint(record.src, record.src_port) }),
+            h("td", { class: "mono endpoint", text: endpoint(record.dst, record.dst_port) }),
             h("td", null, badgeFor(record.protocol)),
             h("td", { class: "mono", text: record.tcp_flags || "—" }),
-            h("td", { class: "mono", text: record.ttl === null ? "—" : String(record.ttl) }),
-            h("td", { class: "mono", text: record.size + " o" }),
-            h("td", { text: record.info || "", title: record.info || "" })
+            h("td", { class: "mono num", text: record.ttl === null ? "—" : String(record.ttl) }),
+            h("td", { class: "mono num", text: record.size + " o" }),
+            h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
           ]);
         }) : emptyRow(9, "Aucun paquet capturé pour l'instant."));
       }).catch(function (error) {
@@ -617,8 +617,8 @@
               : h("span", { class: "mono", text: flow.service_port === null ? "—" : String(flow.service_port) })),
             h("td", null, badgeFor(flow.app_protocol || flow.transport)),
             h("td", null, h("span", { class: stateClass(flow.state), text: flow.state_label || flow.state })),
-            h("td", { class: "mono", text: String(flow.packets) }),
-            h("td", { class: "mono", text: fmtBytes(flow.bytes_total) }),
+            h("td", { class: "mono num", text: String(flow.packets) }),
+            h("td", { class: "mono num", text: fmtBytes(flow.bytes_total) }),
             h("td", { class: "mono", text: fmtDuration(flow.duration) }),
             h("td", {
               text: flow.domain ? flow.domain : (flow.direction === "local" ? "sortant" : flow.direction === "distant" ? "entrant" : "indéterminé"),
@@ -922,14 +922,14 @@
       var flows = data.flows || [];
       replace(flowsBody, flows.length ? flows.map(function (flow) {
         return h("tr", null, [
-          h("td", { class: "mono", text: flow.src }),
-          h("td", { class: "mono", text: flow.dst }),
-          h("td", { class: "mono", text: flow.dst_port === null ? "—" : String(flow.dst_port) }),
+          h("td", { class: "mono endpoint", text: flow.src }),
+          h("td", { class: "mono endpoint", text: flow.dst }),
+          h("td", { class: "mono num", text: flow.dst_port === null ? "—" : String(flow.dst_port) }),
           h("td", null, badgeFor(flow.app_protocol || flow.transport)),
-          h("td", { text: flow.domain || "—" }),
-          h("td", { class: "mono", text: String(flow.packets) }),
-          h("td", { class: "mono", text: fmtBytes(flow.bytes_total) }),
-          h("td", { text: flow.explanation || "—" })
+          h("td", { class: "mono", text: flow.domain || "—" }),
+          h("td", { class: "mono num", text: String(flow.packets) }),
+          h("td", { class: "mono num", text: fmtBytes(flow.bytes_total) }),
+          h("td", { class: "summary-cell", text: flow.explanation || "—" })
         ]);
       }) : emptyRow(8, "Aucune communication enregistrée pour cette session."));
 
