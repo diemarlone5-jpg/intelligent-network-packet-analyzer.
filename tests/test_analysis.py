@@ -16,7 +16,7 @@ from app.analysis.flows import (
     state_label,
 )
 from app.analysis.parser import extract_http_host, extract_tls_sni
-from app.analysis.protocols import classify_address, lookup_port
+from app.analysis.protocols import classify_address, is_translation_prefix, lookup_port
 from app.models import KIND_ALERTE, KIND_HYPOTHESE, KIND_OBSERVATION
 from tests.conftest import (
     LOCAL_IP,
@@ -265,6 +265,55 @@ class TestBaseDeConnaissance:
         assert is_translation_prefix("192.168.1.10") is False
         assert is_translation_prefix(None) is False
 
+    def test_decouverte_du_prefixe_nat64_du_reseau(self):
+        """Chaque operateur choisit son propre prefixe NAT64 (RFC 6052) : il ne
+        peut donc pas figurer dans une liste fixe. La RFC 7050 permet de le
+        decouvrir, et c'est indispensable pour ne pas presenter une passerelle
+        comme un hote unique.
+
+        Le test tolere l'absence de DNS64 (reseau sans traduction) : ce qui est
+        verifie, c'est que la reponse est vide, ou constituee de prefixes /96
+        valides et effectivement reconnus par la classification.
+        """
+        import ipaddress
+
+        from app.analysis.protocols import discover_nat64_prefixes
+        prefixes = discover_nat64_prefixes()
+        assert isinstance(prefixes, tuple)
+
+        for prefixe in prefixes:
+            assert prefixe.endswith("/96")
+            network = ipaddress.ip_network(prefixe)
+            assert network.prefixlen == 96
+            exemple = str(network.network_address)
+            assert is_translation_prefix(exemple) is True
+
+    def test_tous_les_prefixes_annonces_sont_retenus(self):
+        """Un resolveur peut annoncer le prefixe bien connu ET celui de
+        l'operateur, et varier d'une interrogation a l'autre. Ce qui a ete
+        appris ne doit jamais etre perdu."""
+        from app.analysis import protocols
+        from app.analysis.protocols import discover_nat64_prefixes
+
+        prefixes = discover_nat64_prefixes()
+        assert discover_nat64_prefixes() == prefixes      # stable (cache)
+        assert len(set(prefixes)) == len(prefixes)        # aucun doublon
+
+        # On simule un reseau qui n'annonce plus rien : l'acquis doit rester.
+        acquis = protocols._NAT64_CACHE["prefixes"]
+        protocols.discover_nat64_prefixes(force=True)
+        assert set(acquis).issubset(set(protocols._NAT64_CACHE["prefixes"]))
+
+    def test_adresses_de_diffusion_reconnues(self):
+        """255.255.255.255 et les diffusions dirigees ne sont pas des hotes."""
+        from app.analysis.protocols import is_broadcast
+        assert is_broadcast("255.255.255.255") is True
+        assert is_broadcast("192.168.1.255") is True
+        assert is_broadcast("192.168.1.10") is False
+        assert is_broadcast("ff02::1") is False
+        assert classify_address("192.168.1.255") == "diffusion"
+        assert classify_address("255.255.255.255") == "diffusion"
+
 
 class TestDetectionDesAdressesLocales:
     """Sans reconnaissance des IPv6, une communication SORTANTE peut etre prise
@@ -465,9 +514,28 @@ class TestDetection:
         # Requete mDNS : diffusion vers le groupe 224.0.0.251
         table.observe(parse(udp_packet(src="192.168.1.51", dst="224.0.0.251",
                                        sport=5353, dport=5353, ts=1000.1), 2))
+        # Resolution NetBIOS : diffusion dirigee vers tout le sous-reseau
+        table.observe(parse(udp_packet(src=LOCAL_IP, dst="192.168.1.255",
+                                       sport=137, dport=137, ts=1000.2), 3))
         analyzer = BehaviorAnalyzer(is_local=lambda ip: ip == LOCAL_IP)
         events = analyzer.analyze(table.snapshot(), now=1000.0)
         assert not any(e.rule == "service_sensible_joignable" for e in events)
+
+    def test_pas_de_volume_dominant_sous_le_seuil(self):
+        """Une part de volume elevee mais ordinaire ne doit pas devenir un
+        evenement : sinon la liste est noyee et les vraies detections disparaissent."""
+        table = FlowTable(is_local=lambda ip: ip == LOCAL_IP)
+        index = 0
+        # 8 interlocuteurs distincts, donc la contrainte de diversite passe
+        for destination in ("203.0.113.%d" % n for n in range(1, 9)):
+            index += 1
+            table.observe(parse(tcp_packet(sport=51000 + index, dst=destination,
+                                           dport=443, flags="PA", ts=1000.0,
+                                           payload=b"x" * 200), index))
+        analyzer = BehaviorAnalyzer(is_local=lambda ip: ip == LOCAL_IP)
+        events = analyzer.analyze(table.snapshot(), now=1000.0)
+        # Repartition egale : aucune concentration ne merite d'etre signalee
+        assert not any(e.rule == "volume_dominant" for e in events)
 
     def test_beaconing_sur_fenetre_longue(self):
         """Un rythme regulier ne se voit que sur une duree longue.

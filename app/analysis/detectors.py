@@ -48,20 +48,24 @@ class DetectionConfig:
     unanswered_syn: int = 15           # SYN sans reponse
     dns_queries: int = 40              # volume de requetes DNS
     dns_entropy_threshold: float = 3.4  # entropie d'un nom = tunnel/DGA possible
-    volume_share: float = 0.35         # part du volume total d'un seul hote
+    volume_share: float = 0.75         # part du volume total d'un seul hote
     # Un echantillon trop maigre rend le pourcentage trompeur : avec un seul
     # flux, l'hote concentre 100 % du trafic sans que cela signifie quoi que
     # ce soit. On exige donc un minimum de matiere avant de comparer.
     volume_min_flows: int = 5
-    volume_min_bytes: int = 50_000
+    volume_min_bytes: int = 1_000_000
     # Avec peu d'interlocuteurs, "concentre 90 % du volume" n'apprend rien :
     # c'est le cas normal d'une conversation unique et volumineuse. La regle
     # n'a de sens que s'il y a une vraie diversite de destinations.
-    volume_min_remote_hosts: int = 4
+    volume_min_remote_hosts: int = 6
     beacon_min_series: int = 5         # connexions regulieres = balise possible
     beacon_jitter: float = 0.30        # dispersion relative toleree
     baseline_factor: float = 3.0       # ecart au comportement habituel
     cooldown_seconds: float = 45.0     # anti-repetition d'une meme alerte
+    # Les regles purement informatives derivent naturellement avec le temps
+    # (une part de volume change a chaque fenetre) : sans delai plus long,
+    # elles finissent par saturer la liste et masquer les vraies detections.
+    cooldown_info_seconds: float = 300.0
 
 
 def shannon_entropy(text: str) -> float:
@@ -132,8 +136,10 @@ class BehaviorAnalyzer:
     def _emit(self, event: Event) -> bool:
         """Applique le delai anti-repetition. Retourne True si l'evenement passe."""
         signature = f"{event.rule}:{event.actor or ''}"
+        delai = (self.config.cooldown_info_seconds if event.severity == "info"
+                 else self.config.cooldown_seconds)
         last = self._last_emitted.get(signature, 0.0)
-        if event.ts - last < self.config.cooldown_seconds:
+        if event.ts - last < delai:
             return False
         self._last_emitted[signature] = event.ts
         return True
@@ -233,12 +239,15 @@ class BehaviorAnalyzer:
             if not info or not info.sensitive:
                 continue
 
-            # Un service contacte en diffusion (SSDP, mDNS, LLMNR) n'est pas un
-            # service expose : c'est un mecanisme de decouverte, present sur
-            # presque tous les reseaux domestiques. Le presenter comme une
+            # Un service contacte en diffusion (SSDP, mDNS, LLMNR, NetBIOS) n'est
+            # pas un service expose : c'est un mecanisme de decouverte, present
+            # sur presque tous les reseaux domestiques. Le presenter comme une
             # alerte serait un cri au loup, exactement ce que le cahier des
             # charges interdit. On ignore donc ces cas ici.
-            if classify_address(f.dst) == "multicast" or classify_address(f.src) == "multicast":
+            portee_destination = classify_address(f.dst)
+            if portee_destination in ("multicast", "diffusion"):
+                continue
+            if classify_address(f.src) in ("multicast", "diffusion"):
                 continue
 
             inbound = infer_direction(f, self.is_local) == "distant"

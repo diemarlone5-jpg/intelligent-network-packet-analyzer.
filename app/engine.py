@@ -61,6 +61,7 @@ class AnalyzerEngine:
         self._events: deque[Event] = deque(maxlen=1000)
         self._pending_packets: list[PacketRecord] = []
         self._errors: deque[tuple[float, str]] = deque(maxlen=50)
+        self._notes: deque[tuple[float, str]] = deque(maxlen=50)
 
         # Compteurs incrementaux : les statistiques doivent rester instantanees
         # meme apres plusieurs centaines de milliers de paquets.
@@ -74,6 +75,8 @@ class AnalyzerEngine:
         self._started_at: float | None = None
 
         self.session_id: int | None = None
+        self.nat64_prefixes: tuple[str, ...] = ()
+        self.nat64_prefix: str | None = None
         self._last_persist = 0.0
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -94,11 +97,21 @@ class AnalyzerEngine:
                 "interrompue : l'application ne s'est pas arretee proprement"
             )
             if closed:
-                self._record_error(
+                self._record_note(
                     f"{closed} session(s) precedemment interrompue(s) ont ete cloturees."
                 )
         except Exception as exc:
             self._record_error(f"Cloture des sessions orphelines impossible : {type(exc).__name__}")
+
+        # Determine une fois pour toutes le prefixe de traduction du reseau
+        # (RFC 7050). Le faire ici evite une requete DNS au milieu du traitement
+        # d'un paquet, et permet d'afficher le resultat a l'utilisateur.
+        try:
+            from app.analysis.protocols import discover_nat64_prefixes
+            self.nat64_prefixes = discover_nat64_prefixes()
+        except Exception:
+            self.nat64_prefixes = ()
+        self.nat64_prefix = self.nat64_prefixes[0] if self.nat64_prefixes else None
 
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._analysis_loop,
@@ -205,8 +218,19 @@ class AnalyzerEngine:
                 self._domains[record.domain] += 1
 
     def _record_error(self, message: str) -> None:
+        """Consigne un probleme reel. Affiche comme avertissement a l'utilisateur."""
         with self._lock:
             self._errors.append((time.time(), message))
+
+    def _record_note(self, message: str) -> None:
+        """Consigne une information. N'est PAS presentee comme une erreur.
+
+        La distinction compte : melanger les deux ferait apparaitre un simple
+        compte rendu de demarrage comme un incident, et l'utilisateur perdrait
+        confiance dans les avertissements qui comptent vraiment.
+        """
+        with self._lock:
+            self._notes.append((time.time(), message))
 
     # ==================================================================
     # Fil d'analyse
@@ -344,6 +368,10 @@ class AnalyzerEngine:
         with self._lock:
             return [msg for _, msg in list(self._errors)[-limit:]][::-1]
 
+    def note_snapshot(self, limit: int = 10) -> list[str]:
+        with self._lock:
+            return [msg for _, msg in list(self._notes)[-limit:]][::-1]
+
     # ==================================================================
     # Explication d'une communication
     # ==================================================================
@@ -413,6 +441,9 @@ class AnalyzerEngine:
                 d for d, _ in destinations if classify_address(d) == "public"
             })[:12],
             "errors": self.error_snapshot(5),
+            "notes": self.note_snapshot(3),
+            "nat64_prefix": self.nat64_prefix,
+            "nat64_prefixes": list(self.nat64_prefixes),
             "uptime": (time.time() - self._started_at) if self._started_at else 0.0,
         }
 

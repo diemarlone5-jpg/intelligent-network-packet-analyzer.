@@ -370,6 +370,7 @@ code, .mono {
 .flash[data-kind="ok"] { border-color: var(--accent-line); background: var(--accent-soft); }
 .flash[data-kind="error"] { border-color: var(--danger); background: var(--danger-soft); }
 .flash[data-kind="warn"] { border-color: var(--warn); background: var(--warn-soft); }
+.flash[data-kind="info"] { border-color: var(--info); background: var(--info-soft); }
 
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(-4px); }

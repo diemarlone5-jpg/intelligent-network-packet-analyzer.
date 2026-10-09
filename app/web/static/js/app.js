@@ -350,7 +350,16 @@
           serviceRow("Reformulation", "ok",
             data.reformulation.modele_actif
               ? ("modèle " + data.reformulation.fournisseur)
-              : "résumé par règles (aucune configuration requise)")
+              : "résumé par règles (aucune configuration requise)"),
+          serviceRow("Traduction d'adresses",
+            data.traduction && data.traduction.prefixes_nat64 &&
+            data.traduction.prefixes_nat64.length ? "ok" : "off",
+            data.traduction && data.traduction.prefixes_nat64 &&
+            data.traduction.prefixes_nat64.length
+              ? ("préfixe(s) détecté(s) : " +
+                 data.traduction.prefixes_nat64.join(", ") +
+                 " — ces adresses représentent plusieurs destinations")
+              : "aucun préfixe de traduction détecté sur ce réseau")
         ]);
       }).catch(function (error) {
         replace(servicesBox, h("p", { class: "empty", text: "État indisponible : " + error.message }));
@@ -464,7 +473,14 @@
       }
 
       var errs = stats.errors || [];
-      if (errs.length) flash("Analyse : " + errs[0], "warn");
+      var notes = stats.notes || [];
+      if (errs.length) {
+        flash("Analyse : " + errs[0], "error");
+      } else if (notes.length) {
+        // Une note n'est pas une erreur : la presenter comme telle ferait
+        // perdre confiance dans les avertissements qui comptent vraiment.
+        flash(notes[0], "info");
+      }
     }
 
     window.__pkaRefresh = function () {

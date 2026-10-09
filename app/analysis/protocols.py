@@ -19,6 +19,7 @@ niveau de confiance que le moteur d'explication doit respecter.
 from __future__ import annotations
 
 import ipaddress
+import threading
 from dataclasses import dataclass
 from typing import Literal
 
@@ -599,6 +600,7 @@ SCOPE_LABELS = {
     "public": "adresse publique (joignable sur Internet)",
     "loopback": "adresse de boucle locale (la machine se parle a elle-meme)",
     "multicast": "adresse de diffusion groupee",
+    "diffusion": "adresse de diffusion (tous les appareils du reseau)",
     "lien-local": "adresse locale automatique (aucun serveur DHCP n'a repondu)",
     "reserve": "plage reservee ou non attribuee",
     "traduction": "prefixe de traduction (plusieurs destinations reelles derriere)",
@@ -610,35 +612,128 @@ SCOPE_LABELS = {
 # Les prendre pour un hote ferait dire a l'analyse « un serveur concentre 97 %
 # du trafic » alors qu'il s'agit en realite de dizaines de serveurs distincts.
 TRANSLATION_NETWORKS = (
-    "64:ff9b::/96",       # NAT64 (RFC 6052)
-    "64:ff9b:1::/48",     # NAT64 local (RFC 8215)
+    "64:ff9b::/96",       # NAT64, prefixe bien connu (RFC 6052)
+    "64:ff9b:1::/48",     # NAT64, usage local (RFC 8215)
     "2002::/16",          # 6to4 (RFC 3056)
     "2001::/32",          # Teredo (RFC 4380)
     "::ffff:0:0/96",      # IPv4-mapped
 )
 
+# --------------------------------------------------------------------------
+# Decouverte du prefixe NAT64 propre au reseau (RFC 7050)
+#
+# RFC 6052 autorise chaque operateur a choisir SON prefixe de traduction : il
+# ne figure donc dans aucun registre fixe. Sur le reseau de ce projet, c'est
+# « 64:ff9c::/96 », qui n'apparait nulle part dans la norme. Une liste figee ne
+# peut donc pas repondre : il faut poser la question au reseau.
+#
+# La methode normalisee consiste a interroger `ipv4only.arpa`, nom reserve qui
+# porte les deux adresses IPv4 192.0.0.170 et 192.0.0.171. Un resolveur DNS64
+# reecrit ces adresses en IPv6 en les integrant dans le prefixe du reseau :
+# il suffit alors de lire les 32 derniers bits pour retrouver le prefixe.
+# --------------------------------------------------------------------------
+
+_NAT64_CACHE: dict[str, object] = {"prefixes": (), "checked_at": 0.0, "done": False}
+_NAT64_LOCK = threading.Lock()
+NAT64_RECHECK_SECONDS = 3600.0
+_IPV4ONLY_MARKERS = (b"\xc0\x00\x00\xaa", b"\xc0\x00\x00\xab")  # 192.0.0.170 et .171
+
+
+def discover_nat64_prefixes(force: bool = False) -> tuple[str, ...]:
+    """Determine TOUS les prefixes NAT64 annonces par le reseau courant.
+
+    Retourne un tuple de notations CIDR (par exemple (« 64:ff9b::/96 »,
+    « 64:ff9c::/96 »)), vide si le reseau n'utilise pas de traduction.
+
+    Pourquoi plusieurs : un resolveur peut annoncer simultanement le prefixe
+    bien connu et le prefixe propre a l'operateur, et l'ordre de reponse varie
+    d'une interrogation a l'autre. Ne conserver que le premier trouve rendrait
+    la detection instable : un demarrage reconnaitrait l'adresse, le suivant
+    non. On recense donc l'ensemble.
+
+    Le resultat est mis en cache : interroger le DNS a chaque paquet serait
+    absurde, et un prefixe de traduction change tres rarement.
+    """
+    import socket as _socket
+    import time as _time
+
+    with _NAT64_LOCK:
+        maintenant = _time.time()
+        if (not force and _NAT64_CACHE["done"]
+                and maintenant - float(_NAT64_CACHE["checked_at"]) < NAT64_RECHECK_SECONDS):
+            return _NAT64_CACHE["prefixes"]  # type: ignore[return-value]
+
+        # On part de ce qui a deja ete appris : un resolveur peut annoncer le
+        # prefixe bien connu a une interrogation et celui de l'operateur a la
+        # suivante. Remplacer au lieu de fusionner ferait perdre un prefixe
+        # pourtant toujours utilise par le reseau.
+        prefixes: set[str] = set(_NAT64_CACHE["prefixes"])  # type: ignore[arg-type]
+        try:
+            infos = _socket.getaddrinfo("ipv4only.arpa", None, _socket.AF_INET6)
+            for info in infos:
+                adresse = info[4][0].split("%")[0]
+                try:
+                    resolue = ipaddress.IPv6Address(adresse)
+                except ValueError:
+                    continue
+                # Les 32 derniers bits doivent contenir l'une des deux adresses
+                # reserves : c'est la signature d'une reponse synthetisee.
+                if resolue.packed[-4:] in _IPV4ONLY_MARKERS:
+                    prefixes.add(str(ipaddress.IPv6Network((resolue, 96), strict=False)))
+        except Exception:
+            pass   # reseau sans DNS64, ou resolution indisponible : on garde l'acquis
+
+        resultat = tuple(sorted(prefixes))
+        _NAT64_CACHE.update({"prefixes": resultat, "checked_at": maintenant, "done": True})
+        return resultat
+
+
+def discover_nat64_prefix(force: bool = False) -> str | None:
+    """Prefixe de traduction principal, pour l'affichage. None s'il n'y en a pas."""
+    prefixes = discover_nat64_prefixes(force=force)
+    return prefixes[0] if prefixes else None
+
 
 def is_translation_prefix(ip: str | None) -> bool:
     """L'adresse est-elle un prefixe de traduction IPv6 ?
 
-    Ce n'est pas un hote : c'est une passerelle. La distinguer evite des
-    conclusions trompeuses sur « l'hote qui concentre le trafic ».
+    Ce n'est pas un hote : c'est une passerelle derriere laquelle se trouvent de
+    nombreuses destinations. La distinguer evite des conclusions trompeuses sur
+    « l'hote qui concentre le trafic ».
+
+    Deux sources : les prefixes normalises connus, et ceux reellement decouverts
+    sur ce reseau (RFC 7050), car chaque operateur choisit les siens.
     """
     if not ip or ":" not in ip:
         return False
-    import ipaddress as _ipaddress
 
     try:
-        address = _ipaddress.ip_address(ip)
+        address = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    for network in TRANSLATION_NETWORKS:
+
+    for network in (*TRANSLATION_NETWORKS, *discover_nat64_prefixes()):
         try:
-            if address in _ipaddress.ip_network(network):
+            if address in ipaddress.ip_network(network):
                 return True
         except ValueError:
             continue
     return False
+
+
+def is_broadcast(ip: str | None) -> bool:
+    """L'adresse est-elle une adresse de diffusion ?
+
+    Une diffusion n'a pas d'interlocuteur unique : la traiter comme « un hote »
+    fausse aussi bien le sens de la communication que l'analyse de volume.
+    """
+    if not ip or ":" in ip:
+        return False
+    try:
+        address = ipaddress.IPv4Address(ip)
+    except ValueError:
+        return False
+    return str(address) == "255.255.255.255" or address.packed[-1] == 255
 
 
 def classify_address(ip: str | None) -> str:
@@ -652,6 +747,8 @@ def classify_address(ip: str | None) -> str:
 
     if is_translation_prefix(ip):
         return "traduction"
+    if is_broadcast(ip):
+        return "diffusion"
 
     try:
         addr = ipaddress.ip_address(ip)

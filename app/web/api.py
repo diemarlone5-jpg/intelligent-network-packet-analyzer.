@@ -252,6 +252,14 @@ async def dependencies(request: Request):
             "modele_actif": bool(settings.ai_enabled and settings.ai_api_key),
             "fournisseur": settings.ai_model if settings.ai_enabled else "regles (local)",
         },
+        "traduction": {
+            "prefixes_nat64": list(engine_of(request).nat64_prefixes),
+            "methode": ("decouverts par la methode RFC 7050 (interrogation de "
+                        "ipv4only.arpa), car chaque reseau choisit ses propres "
+                        "prefixes de traduction"),
+            "effet": ("les adresses de ces prefixes ne sont pas presentees comme un "
+                      "hote unique : elles representent plusieurs destinations"),
+        },
     }
 
 
