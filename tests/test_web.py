@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -277,12 +278,21 @@ class TestEnrichissement:
             assert donnees["intel"]["source"] == "classification locale"
 
     def test_adresse_invalide_geree(self, tmp_path):
+        """Comportement corrige : une adresse invalide est refusee.
+
+        Ce test verifiait auparavant un code 200 avec « scope: inconnu ». Cette
+        reponse etait trompeuse : elle ressemblait a un resultat valide mais
+        vide, et rien n'indiquait que la demande etait erronee.
+        """
         settings = Settings(env="test", mode="cloud", secret_key="z" * 48,
                             sqlite_path=tmp_path / "enrich2.db", enrich_enabled=True)
         application = create_app(settings)
         with TestClient(application) as client:
-            donnees = client.get("/api/enrich", params={"ip": "pas-une-adresse"}).json()
-            assert donnees["intel"]["scope"] == "inconnu"
+            reponse = client.get("/api/enrich", params={"ip": "pas-une-adresse"})
+            assert reponse.status_code == 400
+            donnees = reponse.json()
+            assert donnees["ok"] is False
+            assert "valide" in donnees["error"]
 
 
 # ==========================================================================
@@ -318,3 +328,47 @@ class TestConfiguration:
         from app.config import load_settings
         configuration = load_settings()
         assert len(configuration.secret_key) >= 32
+
+
+# ==========================================================================
+# Compatibilite avec la politique de securite (CSP)
+# ==========================================================================
+
+
+class TestScriptsEnLigne:
+    """La CSP du serveur interdit les scripts en ligne.
+
+    Un script en ligne ne provoque pas d'erreur visible : le navigateur le
+    bloque en silence, et la fonctionnalite qu'il portait disparait. C'est
+    exactement ce qui est arrive : la page de detail d'un paquet transmettait le
+    numero par un script en ligne, donc le numero n'arrivait jamais et la page
+    affichait « aucun paquet n'a ete designe ». Ces tests empechent le retour du
+    probleme.
+    """
+
+    GABARITS = Path(__file__).resolve().parent.parent / "app" / "web" / "templates"
+
+    def test_aucun_script_en_ligne_dans_les_gabarits(self):
+        fautifs = []
+        for gabarit in sorted(self.GABARITS.glob("*.html")):
+            contenu = gabarit.read_text(encoding="utf-8")
+            for balise in re.finditer(r"<script\b[^>]*>", contenu):
+                if "src=" not in balise.group(0):
+                    fautifs.append(f"{gabarit.name}: {balise.group(0)}")
+        assert not fautifs, (
+            "Ces balises <script> sont en ligne et seront bloquees par la CSP "
+            "(script-src 'self') : " + " | ".join(fautifs)
+            + " — utilisez un attribut data- lu par app.js."
+        )
+
+    def test_la_csp_interdit_bien_les_scripts_en_ligne(self, client):
+        entete = client.get("/").headers.get("content-security-policy", "")
+        assert "script-src 'self'" in entete
+        assert "unsafe-inline" not in entete
+
+    def test_la_page_paquet_transmet_le_numero_par_attribut(self, client):
+        reponse = client.get("/packet", params={"number": 42})
+        assert reponse.status_code == 200
+        assert 'data-packet-number="42"' in reponse.text
+        assert "window.PACKET_NUMBER" not in reponse.text
+

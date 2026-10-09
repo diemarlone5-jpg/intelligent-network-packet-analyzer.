@@ -28,7 +28,7 @@ from scapy.layers.inet6 import IPv6
 from scapy.layers.l2 import ARP, Dot1Q, Ether
 from scapy.packet import Packet, Raw
 
-from app.analysis.protocols import APP_PROTOCOLS, classify_address
+from app.analysis.protocols import APP_PROTOCOLS, classify_address, lookup_port
 from app.models import PacketRecord
 
 # Ports sur lesquels on cherche un en-tete HTTP en clair
@@ -291,6 +291,31 @@ class PacketParser:
             r.transport = None
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _label_udp_service(r: PacketRecord) -> None:
+        """Donne a un paquet UDP le nom du service qui ecoute sur son port.
+
+        Le port de destination est examine en premier : c'est lui qui designe le
+        service. Sur un paquet de reponse, le port de destination est celui,
+        ephemere, du client — on retombe alors sur le port source, qui est bien
+        celui du service.
+
+        Si la base ne reconnait pas le port, le paquet reste « UDP » : mieux
+        vaut un nom generique exact qu'un nom precis invente.
+        """
+        for port in (r.dst_port, r.src_port):
+            if port is None:
+                continue
+            info = lookup_port(port, "UDP")
+            if info is None or not info.service:
+                continue
+            nom = info.service.strip()
+            if not nom or nom.upper() == "UDP":
+                continue
+            r.protocol = nom
+            return
+
+    # ------------------------------------------------------------------
     def _infer_application(self, pkt: Packet, r: PacketRecord) -> None:
         """Determine le protocole applicatif a partir de la structure reelle."""
         # --- DNS ---
@@ -325,6 +350,17 @@ class PacketParser:
             return
         if BOOTP in pkt and r.transport == "UDP":
             r.protocol = "DHCP"
+            return
+
+        # --- Autres services portes par UDP (QUIC, mDNS, SSDP, NTP, ...) ---
+        # Sans cette etape, le code s'arretait ici pour tout ce qui n'est ni DNS
+        # ni DHCP, et le paquet restait etiquete « UDP ». Consequence concrete :
+        # un flux video YouTube (QUIC sur UDP/443) s'affichait comme un UDP
+        # anonyme vers une adresse brute, donc impossible a reconnaitre. La base
+        # de connaissance dit pourtant deja que UDP/443 est QUIC ; encore
+        # fallait-il s'en servir.
+        if r.transport == "UDP":
+            self._label_udp_service(r)
             return
 
         if r.transport != "TCP":

@@ -491,6 +491,16 @@ class AnalyzerEngine:
             data["service_sensitive"] = bool(info and info.sensitive)
             data["state_label"] = state_label(flow)
             data["direction"] = infer_direction(flow, self.parser.is_local)
+            # Organisation de l'hote distant, depuis le cache geographique.
+            # Sur un flux QUIC — une video YouTube, par exemple — le nom de
+            # domaine n'est pas lisible : c'est la seule information qui permette
+            # a l'utilisateur de reconnaitre de qui il s'agit.
+            adresse_distante = getattr(flow, "distant", None)
+            intel = self._intel.get(adresse_distante) if adresse_distante else None
+            if intel and not intel.get("error"):
+                data["distant_isp"] = intel.get("isp")
+                data["distant_org"] = intel.get("org")
+                data["distant_country"] = intel.get("country")
             data["caveats"] = [] if flow.handshake_seen else [
                 "Le debut de cette communication n'a pas ete observe."
             ]

@@ -10,12 +10,11 @@
   <p class="toolbar-note" id="packet-ref">Paquet n° {{ packet_number }}</p>
 </section>
 
-<div id="packet-body">
+{# Le numero est transmis par un attribut de donnees, jamais par un script en
+   ligne : la politique de securite du serveur (script-src 'self') bloque les
+   scripts en ligne, et le numero n'arrivait donc jamais au JavaScript. #}
+<div id="packet-body" data-packet-number="{{ packet_number }}">
   <p class="empty">Chargement…</p>
 </div>
 
-{% endblock %}
-
-{% block scripts %}
-<script>window.PACKET_NUMBER = {{ packet_number }};</script>
 {% endblock %}

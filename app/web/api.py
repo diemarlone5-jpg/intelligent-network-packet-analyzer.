@@ -279,6 +279,15 @@ async def events(request: Request, limit: int = Query(100, ge=1, le=1000)):
 @router.get("/enrich", summary="Enrichir une adresse IP")
 async def enrich(request: Request, ip: str = Query(..., min_length=3)):
     """Interroge la source externe pour une adresse, avec cache."""
+    # Une adresse invalide doit etre refusee clairement. La traiter comme une
+    # adresse sans information produirait une reponse « valide mais vide », dont
+    # l'appelant ne pourrait pas deduire que sa demande etait erronee.
+    if not _is_valid_ip(ip):
+        return JSONResponse(
+            {"ok": False, "error": f"« {ip} » n'est pas une adresse IP valide."},
+            status_code=400,
+        )
+
     enricher = request.app.state.enricher
     if enricher is None or not request.app.state.settings.enrich_enabled:
         return JSONResponse(
@@ -290,9 +299,37 @@ async def enrich(request: Request, ip: str = Query(..., min_length=3)):
     return {"ok": True, "intel": intel.to_dict()}
 
 
+def _is_valid_ip(adresse: str) -> bool:
+    """Verifie qu'une chaine est bien une adresse IP.
+
+    La partie apres « % » est retiree : sur Windows, une adresse de lien local
+    s'ecrit « fe80::1%12 », ou 12 designe l'interface.
+    """
+    import ipaddress
+
+    texte = str(adresse or "").split("%")[0].strip()
+    if not texte:
+        return False
+    try:
+        ipaddress.ip_address(texte)
+    except ValueError:
+        return False
+    return True
+
+
 @router.get("/history", summary="Historique des sessions enregistrees")
 async def history(request: Request, session_id: int | None = None):
-    return {"ok": True, **engine_of(request).history(session_id)}
+    resultat = engine_of(request).history(session_id)
+    # Demander une session precise qui n'existe pas doit etre signale comme tel.
+    # Renvoyer une session vide ferait afficher « aucune session enregistree »
+    # alors que des sessions existent bel et bien : le message serait faux.
+    if session_id is not None and resultat.get("session") is None:
+        return JSONResponse(
+            {"ok": False, "error": f"La session #{session_id} n'existe pas.",
+             "sessions": resultat.get("sessions") or []},
+            status_code=404,
+        )
+    return {"ok": True, **resultat}
 
 
 @router.get("/protocols", summary="Base de connaissance reseau")

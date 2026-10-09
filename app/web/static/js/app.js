@@ -153,6 +153,27 @@
     return texte.indexOf("AS") === 0 ? texte : "AS" + texte;
   }
 
+  /* Le champ « org » de la source externe porte parfois un nom interne peu
+     parlant : pour Google, il vaut « EU metro frontend », alors que le champ
+     « isp » vaut « Google LLC ». Celui-ci nomme l'operateur du reseau, donc ce
+     que l'utilisateur reconnait. Les deux sont conserves dans l'infobulle. */
+  function orgText(geo) {
+    if (!geo || geo.error) return "—";
+    var principal = geo.isp || geo.org;
+    if (!principal) return "—";
+    return String(principal);
+  }
+
+  function orgTitle(geo) {
+    if (!geo || geo.error) return "";
+    var morceaux = [];
+    if (geo.isp) morceaux.push("Opérateur : " + geo.isp);
+    if (geo.org) morceaux.push("Organisation : " + geo.org);
+    if (geo.asn) morceaux.push("Réseau : " + fmtAsn(geo.asn));
+    if (geo.city) morceaux.push("Ville : " + geo.city);
+    return morceaux.join("\n");
+  }
+
   /* Cellule d'adresse : la largeur est bornee et le texte se termine par des
      points de suspension quand il ne tient pas. C'est le comportement des
      colonnes de Wireshark, et la valeur complete reste accessible au survol
@@ -182,7 +203,7 @@
       h("td", null, badgeFor(record.protocol)),
       h("td", { class: "mono num", text: (record.size || 0) + " o" }),
       h("td", { class: "mono pays", text: geoText(record, "country") }),
-      h("td", { class: "org", text: geoText(record, "org"), title: geoText(record, "org") }),
+      h("td", { class: "org", text: orgText(record.geo), title: orgTitle(record.geo) }),
       h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
     ]);
 
@@ -710,7 +731,15 @@
           });
           return h("tr", null, [
             endpointCell(flow.observer, null),
-            endpointCell(flow.distant, flow.distant_port),
+            // L'organisation s'affiche sous l'adresse distante : sur un flux
+            // QUIC (video YouTube), c'est le seul repere qui permette de
+            // reconnaitre l'interlocuteur, le nom de domaine etant chiffre.
+            h("td", { class: "addresses" }, [
+              h("div", { class: "mono", text: endpoint(flow.distant, flow.distant_port) }),
+              flow.distant_isp || flow.distant_org
+                ? h("div", { class: "hostname", text: (flow.distant_isp || flow.distant_org) })
+                : null
+            ]),
             // Service et protocole dans une seule cellule : deux colonnes pour
             // deux informations courtes elargissaient le tableau sans rien
             // apporter a la lecture.
@@ -1220,7 +1249,7 @@
     var zone = $("#packet-body");
     if (!zone) return;
 
-    var numero = window.PACKET_NUMBER;
+    var numero = parseInt(zone.getAttribute("data-packet-number") || "0", 10);
     if (!numero) {
       replace(zone, h("p", { class: "empty", text: "Aucun paquet n'a ete designe." }));
       return;
@@ -1356,7 +1385,7 @@
             h("td", { class: "mono", text: adresse.ip || "—" }),
             h("td", { text: adresse.country || "—" }),
             h("td", { text: adresse.city || "—" }),
-            h("td", { class: "geo-org", text: adresse.org || adresse.isp || "—" }),
+            h("td", { class: "geo-org", text: orgText(adresse), title: orgTitle(adresse) }),
             h("td", { class: "mono", text: adresse.asn ? fmtAsn(adresse.asn) : "—" }),
             h("td", { class: "mono num", text: String(adresse.packets || 0) })
           ]);
