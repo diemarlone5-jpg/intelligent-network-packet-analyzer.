@@ -197,26 +197,36 @@
     /* L'etat affiche doit venir du SERVEUR, jamais d'une supposition locale.
        Sinon une capture reellement en cours peut apparaitre comme arretee, et
        une erreur passagere comme une panne definitive. */
+    function applyCaptureState(capture) {
+      if (!capture) return;
+      if (capture.running) {
+        setState("running", "Capture en cours");
+      } else {
+        setState("idle", "Capture arrêtée");
+      }
+    }
+
     function refreshState(selectInterface) {
       return api("/api/stats").then(function (data) {
         var capture = data.capture || {};
-        if (capture.running) {
-          setState("running", "Capture en cours");
-          if (selectInterface && capture.interface_id && ifaceSelect) {
-            var match = Array.prototype.find.call(
-              ifaceSelect.options,
-              function (option) { return option.value === capture.interface_id; }
-            );
-            if (match) ifaceSelect.value = match.value;
-          }
-        } else {
-          setState("idle", "Capture arrêtée");
+        applyCaptureState(capture);
+        if (selectInterface && capture.interface_id && ifaceSelect) {
+          var match = Array.prototype.find.call(
+            ifaceSelect.options,
+            function (option) { return option.value === capture.interface_id; }
+          );
+          if (match) ifaceSelect.value = match.value;
         }
         return capture;
       }).catch(function () {
         setState("idle", "État indisponible");
       });
     }
+
+    // Le tableau de bord recoit deja cet etat par le flux temps reel : on
+    // expose donc la fonction pour qu'il n'ait pas a interroger le serveur
+    // en plus, ce qui doublerait les requetes sans rien apporter.
+    window.__pkaApplyCaptureState = applyCaptureState;
 
     startBtn.addEventListener("click", function () {
       startBtn.disabled = true;
@@ -266,10 +276,14 @@
     // pouvoir y selectionner celle qui capture reellement.
     loadInterfaces().then(function () { refreshState(true); });
 
-    // Rafraichissement periodique : la capture peut avoir ete arretee depuis un
-    // autre onglet, ou s'etre interrompue toute seule. La fonction est enveloppee
-    // car setInterval lui transmettrait sinon l'identifiant du minuteur.
-    setInterval(function () { refreshState(false); }, 5000);
+    // Le tableau de bord est alimente en continu par le flux temps reel : il
+    // n'a pas besoin d'interroger en plus. Les autres pages, elles, n'ont pas
+    // de flux, d'ou ce sondage. La fonction est enveloppee car setInterval lui
+    // transmettrait sinon l'identifiant du minuteur.
+    var tableauDeBord = document.querySelector("#stat-packets");
+    if (!tableauDeBord) {
+      setInterval(function () { refreshState(false); }, 8000);
+    }
 
     return { setState: setState };
   }
@@ -432,6 +446,12 @@
         if (payload.capture) { /* reponse de /api/stats */ }
       }
       stats = stats || payload;
+
+      // L'etat de capture arrive avec les statistiques : on en profite pour
+      // mettre a jour la pastille, sans requete supplementaire.
+      if (stats.capture && window.__pkaApplyCaptureState) {
+        window.__pkaApplyCaptureState(stats.capture);
+      }
 
       $("#stat-packets").textContent = String(stats.packets || 0);
       $("#stat-flows").textContent = String(stats.flows || 0);

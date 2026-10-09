@@ -37,6 +37,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reload", action="store_true", help="rechargement automatique en developpement")
     parser.add_argument("--log-level", default="info",
                         choices=["critical", "error", "warning", "info", "debug"])
+    parser.add_argument(
+        "--access-log", action="store_true",
+        help=("journaliser chaque requete HTTP. Desactive par defaut : "
+              "l'interface interroge le serveur en continu, et le defilement "
+              "permanent qui en resulte masque les messages qui comptent."),
+    )
     return parser.parse_args()
 
 
@@ -64,12 +70,15 @@ def main() -> int:
     print("  Intelligent Network Packet Analyzer")
     print("=" * 62)
     print(f"  Mode              : {settings.mode}"
-          + ("  (capture reseau active)" if settings.is_local else "  (consultation seule)"))
+          + ("  (capture reseau disponible)" if settings.is_local else "  (consultation seule)"))
     print(f"  Interface web     : http://{args.host}:{args.port}")
     print(f"  Documentation API : http://{args.host}:{args.port}/api/docs")
     print(f"  Base locale       : {settings.sqlite_path}")
     print(f"  Supabase          : {'active' if settings.supabase_enabled else 'desactive'}")
     print(f"  Enrichissement    : {'active' if settings.enrich_enabled else 'desactive'}")
+    print("=" * 62)
+    print("  Journal des requetes HTTP : desactive"
+          "  (ajoutez --access-log pour l'activer)")
     print("=" * 62)
 
     # Sur une plateforme d'hebergement, le port est impose par l'environnement
@@ -79,9 +88,11 @@ def main() -> int:
 
     if args.reload:
         uvicorn.run("app.web.app:create_app", factory=True, host=host, port=port,
-                    reload=True, log_level=args.log_level)
+                    reload=True, log_level=args.log_level,
+                    access_log=args.access_log)
     else:
-        uvicorn.run(app, host=host, port=port, log_level=args.log_level)
+        uvicorn.run(app, host=host, port=port, log_level=args.log_level,
+                    access_log=args.access_log)
     return 0
 
 
