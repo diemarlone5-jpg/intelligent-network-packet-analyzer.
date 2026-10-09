@@ -122,6 +122,39 @@ async def packet_detail(request: Request, number: int = 0):
     return templates.TemplateResponse(request, "packet.html", context)
 
 
+@router.get("/network", response_class=HTMLResponse)
+async def network(request: Request):
+    """Qui d'autre est sur le reseau, et qu'est-ce que chacun annonce ?
+
+    Page construite uniquement sur des diffusions publiques (ARP, mDNS). Elle
+    repond a une question que la liste des paquets ne permet pas de se poser, et
+    elle explique aussi pourquoi le contenu prive des autres appareils reste
+    hors de portee : c'est une limite du reseau, pas de l'outil.
+    """
+    context = base_context(request)
+    context["active"] = "network"
+    context["local_addresses"] = _useful_local_addresses(
+        request.app.state.engine.parser.local_ips
+    )
+    return templates.TemplateResponse(request, "network.html", context)
+
+
+def _useful_local_addresses(adresses) -> list[str]:
+    """Adresses de cette machine qui meritent d'etre affichees.
+
+    La liste brute contient des adresses techniques (boucle locale, adresses de
+    lien local, adaptateurs virtuels) qui noient l'information utile. On ne
+    garde que ce qui identifie la machine sur le reseau.
+    """
+    utiles = [
+        adresse for adresse in adresses
+        if not adresse.startswith(("127.", "169.254.", "0.0.0.0", "::1"))
+        and not adresse.startswith("fe80:")
+        and not adresse.startswith("172.26.")   # adaptateur virtuel Windows
+    ]
+    return sorted(utiles)
+
+
 @router.get("/flow", response_class=HTMLResponse)
 async def flow_detail(request: Request, key: str = ""):
     context = base_context(request)

@@ -23,6 +23,7 @@ from collections import Counter, OrderedDict, deque
 from typing import Any
 
 from app.analysis.detectors import BehaviorAnalyzer, DetectionConfig
+from app.analysis.devices import DeviceTable
 from app.analysis.explain import Explainer
 from app.analysis.flows import FlowTable
 from app.analysis.parser import PacketParser
@@ -74,6 +75,9 @@ class AnalyzerEngine:
         # jamais le reseau.
         self._intel: dict[str, dict] = {}
         self._enrich_pending: deque[str] = deque(maxlen=500)
+
+        # Appareils du reseau local et services qu'ils diffusent (ARP, mDNS).
+        self.devices = DeviceTable(self.parser.is_local)
 
         # Compteurs incrementaux : les statistiques doivent rester instantanees
         # meme apres plusieurs centaines de milliers de paquets.
@@ -203,6 +207,7 @@ class AnalyzerEngine:
             self._pending_packets.clear()
             self._raw.clear()
             self.flows.clear()
+            self.devices.clear()
             self._counter = 0
             self._protocols.clear()
             self._sources.clear()
@@ -248,6 +253,10 @@ class AnalyzerEngine:
                 self._domains[record.domain] += 1
 
             self._queue_geolocation(record)
+            # Appareils du reseau local : alimente depuis les diffusions que
+            # tout le monde peut lire (ARP, mDNS). Aucune lecture de trafic
+            # prive, aucun dechiffrement.
+            self.devices.observe(record)
 
     # ------------------------------------------------------------------
     def _counterparty(self, record: PacketRecord) -> str | None:
@@ -435,6 +444,22 @@ class AnalyzerEngine:
             resultats.append(entree)
         resultats.sort(key=lambda item: item.get("packets", 0), reverse=True)
         return resultats[:limit]
+
+    # ------------------------------------------------------------------
+    def devices_snapshot(self) -> dict:
+        """Appareils du reseau local et services qu'ils diffusent.
+
+        Les deux listes sont separees volontairement : un appareil qui CHERCHE
+        un service n'est pas un appareil qui le PROPOSE, et confondre les deux
+        ferait dire a l'outil le contraire de ce qui s'est passe.
+        """
+        with self._lock:
+            return {
+                "devices": self.devices.snapshot(),
+                "services": self.devices.services_snapshot(),
+                "count": self.devices.count(),
+                "local_addresses": sorted(self.parser.local_ips),
+            }
 
     def flow_snapshot(self, limit: int = 200, only_active: bool = False) -> list[dict]:
         flows = self.flows.snapshot()

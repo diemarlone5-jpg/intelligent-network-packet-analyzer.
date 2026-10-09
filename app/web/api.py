@@ -151,6 +151,17 @@ async def geolocation(request: Request, limit: int = Query(200, ge=1, le=2000)):
     return {"ok": True, "addresses": engine_of(request).geolocation_snapshot(limit=limit)}
 
 
+@router.get("/devices", summary="Appareils du reseau local et services diffuses")
+async def devices(request: Request):
+    """Ce que les appareils du reseau diffusent a tout le monde.
+
+    Alimente par ARP et mDNS uniquement : des informations que chaque appareil
+    envoie volontairement a l'ensemble du reseau. Aucune lecture de trafic
+    prive, aucun dechiffrement.
+    """
+    return {"ok": True, **engine_of(request).devices_snapshot()}
+
+
 def _csv_safe(value) -> str:
     """Neutralise les valeurs qu'un tableur interpreterait comme une formule.
 

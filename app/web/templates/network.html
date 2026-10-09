@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Réseau local — Packet Analyzer{% endblock %}
+{% block heading %}Réseau local{% endblock %}
+{% block subheading %}Qui d'autre est sur le réseau, et qu'est-ce que chacun annonce ?{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <p class="toolbar-note" id="net-count">—</p>
+  <p class="toolbar-note mono" id="net-local">
+    Cette machine : {{ local_addresses | join(', ') if local_addresses else '—' }}
+  </p>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Appareils vus sur le réseau</h2>
+  <p class="panel-note">
+    Chaque ligne est un appareil qui a parlé. L'adresse matérielle vient des
+    échanges ARP : c'est l'appareil lui-même qui la donne.
+  </p>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Adresses</th>
+          <th scope="col">Adresse matérielle</th>
+          <th scope="col">Nom</th>
+          <th scope="col">Paquets</th>
+          <th scope="col">Ce qu'il annonce</th>
+          <th scope="col">Dernière activité</th>
+        </tr>
+      </thead>
+      <tbody id="net-devices">
+        <tr><td colspan="6" class="empty">Aucun appareil observé pour l'instant. Démarrez une capture.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Services diffusés sur le réseau</h2>
+  <p class="panel-note">
+    Les appareils annoncent leurs services en mDNS (port 5353, adresses
+    multicasts <span class="mono">224.0.0.251</span> et
+    <span class="mono">ff02::fb</span>). <strong>Annoncer</strong> signifie
+    « moi je propose ce service ». <strong>Rechercher</strong> signifie « un
+    logiciel tourne ici et cherche ce type de service » — donc qu'un appareil
+    utilise bien cette application.
+  </p>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Service</th>
+          <th scope="col">Type technique</th>
+          <th scope="col">Sens</th>
+          <th scope="col">Appareil(s) concerné(s)</th>
+          <th scope="col">Nom(s) annoncé(s)</th>
+        </tr>
+      </thead>
+      <tbody id="net-services">
+        <tr><td colspan="5" class="empty">Aucun service observé pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--warning">
+  <h3>Ce que cette page montre — et ce qu'aucun outil ne peut montrer</h3>
+  <p>
+    <strong>Ce qui est visible :</strong> les informations que les appareils
+    diffusent à tout le réseau, par conception — leur existence (ARP), leur
+    adresse matérielle, leur nom, et les services qu'ils annoncent ou
+    recherchent (mDNS). C'est ainsi qu'on peut savoir qu'un appareil du réseau
+    fait tourner Spotify : le logiciel le fait savoir, en clair, à tout le monde.
+  </p>
+  <p>
+    <strong>Ce qui reste invisible :</strong> le contenu réel des échanges des
+    autres appareils. Sur un Wi-Fi chiffré (WPA2), chaque machine chiffre ses
+    trames avec sa propre clé : votre carte réseau les reçoit mais ne peut pas
+    les déchiffrer. Sur un réseau à commutateur, une trame n'est envoyée qu'au
+    port de l'appareil destinataire — elle ne passe jamais devant vous.
+  </p>
+  <p>
+    <strong>Ce n'est donc pas une limite de cet outil</strong> : c'est une
+    propriété du réseau. Wireshark, sur la même machine et le même réseau, voit
+    exactement la même chose. Pour aller plus loin, il faudrait du matériel :
+    mode moniteur (carte compatible, droits administrateur), port miroir sur un
+    commutateur administrable, ou un concentrateur.
+  </p>
+  <p>
+    <strong>Cette page n'intercepte rien et ne déchiffre rien.</strong> Elle
+    rassemble uniquement ce qui est diffusé volontairement à l'ensemble du
+    réseau.
+  </p>
+</div>
+
+{% endblock %}

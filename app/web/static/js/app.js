@@ -1339,6 +1339,69 @@
     setInterval(charger, REFRESH_MS * 4);
   }
 
+  /* --------------------------------------------------------- 11. reseau local */
+
+  function initNetwork() {
+    var corpsAppareils = $("#net-devices");
+    if (!corpsAppareils) return;
+
+    function charger() {
+      api("/api/devices").then(function (data) {
+        var appareils = data.devices || [];
+        var services = data.services || [];
+
+        $("#net-count").textContent = appareils.length
+          ? appareils.length + " appareil(s) observé(s)"
+          : "Aucun appareil observé pour l'instant.";
+
+        replace(corpsAppareils, appareils.length ? appareils.map(function (appareil) {
+          var annonces = (appareil.services || []).filter(function (s) { return s.label; });
+          var contenu = annonces.length ? annonces.map(function (s) {
+            var sens = s.announced && s.searched ? "annonce et recherche"
+                     : (s.announced ? "annonce" : "recherche");
+            return h("span", {
+              class: "badge " + (s.announced ? "badge--http" : ""),
+              text: s.label + " — " + sens,
+              title: s.type
+            });
+          }) : "—";
+
+          return h("tr", null, [
+            h("td", { class: "mono endpoint",
+                      text: (appareil.addresses || [appareil.ip]).join("  ") + (appareil.is_local ? "   (cette machine)" : "") }),
+            h("td", { class: "mono", text: appareil.mac || "inconnue" }),
+            h("td", { text: appareil.hostname || "—" }),
+            h("td", { class: "mono num", text: String(appareil.packets || 0) }),
+            h("td", null, contenu),
+            h("td", { class: "mono instant", text: fmtClock(appareil.last_seen) })
+          ]);
+        }) : emptyRow(6, "Aucun appareil observé pour l'instant. Démarrez une capture."));
+
+        replace($("#net-services"), services.length ? services.map(function (service) {
+          var sens = service.announced && service.searched ? "annoncé et recherché"
+                   : (service.announced ? "annoncé" : "recherché");
+          return h("tr", null, [
+            h("td", { text: service.label || ("Services propriétaires non documentés (" + String(service.count || 0) + ")") ,
+                      title: (service.types || []).join(", ") }),
+            h("td", { class: "mono", text: service.type }),
+            h("td", null, h("span", {
+              class: "badge" + (service.announced ? " badge--http" : ""),
+              text: sens
+            })),
+            h("td", { class: "mono", text: (service.actors || []).join(", ") || "—" }),
+            h("td", { text: (service.instances || []).join(", ") || "—" })
+          ]);
+        }) : emptyRow(5, "Aucun service observé pour l'instant."));
+      }).catch(function (erreur) {
+        $("#net-count").textContent = "Erreur : " + erreur.message;
+      });
+    }
+
+    charger();
+    setInterval(charger, REFRESH_MS * 2);
+    window.__pkaRefresh = charger;
+  }
+
   /* ------------------------------------------------------------------ demarrage */
 
   function boot() {
@@ -1353,6 +1416,7 @@
     initProtocols();
     initPacketDetail();
     initGeolocation();
+    initNetwork();
     initTheme();
   }
 

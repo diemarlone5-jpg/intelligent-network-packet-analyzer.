@@ -190,6 +190,7 @@ class PacketParser:
 
         try:
             record.layers = self._layer_names(pkt)
+            self._parse_link_layer(pkt, record)
             self._parse_l3_l4(pkt, record)
             self._infer_application(pkt, record)
             record.direction = self._direction(record)
@@ -198,6 +199,23 @@ class PacketParser:
             record.malformed = True
             record.info = f"Paquet non analysable ({type(exc).__name__})"
         return record
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _parse_link_layer(pkt: Packet, r: PacketRecord) -> None:
+        """Recupere les adresses materielles de la couche Ethernet.
+
+        C'est la seule information qui identifie un appareil independamment de
+        son adresse IP : une meme machine peut en changer, son adresse
+        materielle ne change pas. Elle sert a la page « Reseau local ».
+        """
+        try:
+            if Ether in pkt:
+                ether = pkt[Ether]
+                r.src_mac = str(ether.src).lower() or None
+                r.dst_mac = str(ether.dst).lower() or None
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -283,6 +301,13 @@ class PacketParser:
         if DNS in pkt:
             dns = pkt[DNS]
             r.protocol = "DNS"
+            # qr = 0 pour une question, 1 pour une reponse. Cette distinction
+            # compte : demander « qui propose Spotify ? » n'a pas le meme sens
+            # que repondre « moi, je propose Spotify ».
+            try:
+                r.dns_is_query = int(getattr(dns, "qr", 0)) == 0
+            except Exception:
+                r.dns_is_query = None
             try:
                 question = dns.qd
                 if question is not None and hasattr(question, "qname"):

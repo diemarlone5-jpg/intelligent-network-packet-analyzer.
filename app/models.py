@@ -84,6 +84,8 @@ class PacketRecord(Serializable):
     dst: str
     protocol: str                    # protocole le plus precis identifie
     size: int                        # taille totale en octets
+    src_mac: str | None = None       # adresse materielle de l'emetteur (couche Ethernet)
+    dst_mac: str | None = None       # adresse materielle du destinataire
     transport: str | None = None     # TCP / UDP / ICMP / None
     src_port: int | None = None
     dst_port: int | None = None
@@ -95,6 +97,7 @@ class PacketRecord(Serializable):
     direction: str | None = None     # sortant / entrant / interne / inconnu
     layers: list[str] = field(default_factory=list)
     dns_query: str | None = None
+    dns_is_query: bool | None = None  # True = question posee, False = reponse
     http_host: str | None = None
     tls_sni: str | None = None
     malformed: bool = False
