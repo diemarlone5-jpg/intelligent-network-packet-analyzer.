@@ -97,6 +97,31 @@ async def flows(request: Request):
     return templates.TemplateResponse(request, "flows.html", context)
 
 
+@router.get("/geolocation", response_class=HTMLResponse)
+async def geolocation(request: Request):
+    """Ou vont les donnees : origine geographique des adresses distantes.
+
+    Repond a une question que le tableau de paquets ne permet pas de se poser :
+    « vers quels pays mon ordinateur communique-t-il ? »
+    """
+    context = base_context(request)
+    context["active"] = "geolocation"
+    return templates.TemplateResponse(request, "geolocation.html", context)
+
+
+@router.get("/packet", response_class=HTMLResponse)
+async def packet_detail(request: Request, number: int = 0):
+    """Vue detaillee d'un paquet : arbre des couches et contenu brut.
+
+    Reproduction des deux panneaux du bas de Wireshark. Le contenu est charge
+    par le navigateur depuis /api/packet, la page ne fait que le presenter.
+    """
+    context = base_context(request)
+    context["active"] = "packets"
+    context["packet_number"] = number
+    return templates.TemplateResponse(request, "packet.html", context)
+
+
 @router.get("/flow", response_class=HTMLResponse)
 async def flow_detail(request: Request, key: str = ""):
     context = base_context(request)

@@ -120,6 +120,59 @@
     });
   }
 
+  /* ------------------------------------------------- paquets : aides d'affichage */
+
+  /* Repere visuel par protocole, sur le principe des regles de colorisation de
+     Wireshark : l'oeil trie la liste avant meme de lire les colonnes. */
+  function protocolClass(protocol) {
+    var connus = ["dns", "tls", "http", "udp", "tcp", "arp", "icmp", "ipv6"];
+    var cle = String(protocol || "").toLowerCase();
+    return connus.indexOf(cle) >= 0 ? "pkt--" + cle : "";
+  }
+
+  /* Une adresse dont la geographie n'est pas encore connue affiche un tiret.
+     C'est different d'une adresse sans pays : on ne confond pas les deux. */
+  function geoText(record, champ) {
+    var geo = record.geo;
+    if (!geo || geo.error) return "—";
+    var valeur = geo[champ];
+    if (valeur === null || valeur === undefined || valeur === "") return "—";
+    return String(valeur);
+  }
+
+  function ouvrirPaquet(numero) {
+    window.location.href = "/packet?number=" + numero;
+  }
+
+  /* Ligne du tableau des paquets. Cliquable et pilotable au clavier : ouvrir le
+     detail d'un paquet est l'action principale de cette page. */
+  function packetTableRow(record) {
+    var ligne = h("tr", {
+      class: "pkt-row " + protocolClass(record.protocol),
+      tabindex: "0",
+      title: "Afficher le contenu de ce paquet"
+    }, [
+      h("td", { class: "mono num", text: String(record.number) }),
+      h("td", { class: "mono instant", text: fmtClock(record.ts) }),
+      h("td", { class: "mono endpoint", text: endpoint(record.src, record.src_port) }),
+      h("td", { class: "mono endpoint", text: endpoint(record.dst, record.dst_port) }),
+      h("td", null, badgeFor(record.protocol)),
+      h("td", { class: "mono num", text: (record.size || 0) + " o" }),
+      h("td", { class: "mono", text: geoText(record, "country") }),
+      h("td", { class: "geo-org", text: geoText(record, "org") }),
+      h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
+    ]);
+
+    ligne.addEventListener("click", function () { ouvrirPaquet(record.number); });
+    ligne.addEventListener("keydown", function (evenement) {
+      if (evenement.key === "Enter" || evenement.key === " ") {
+        evenement.preventDefault();
+        ouvrirPaquet(record.number);
+      }
+    });
+    return ligne;
+  }
+
   /* ------------------------------------------------------------------- flash */
 
   var flashTimer = null;
@@ -559,21 +612,22 @@
         var records = data.packets || [];
         counter.textContent = records.length + " paquet(s) affiché(s)";
         replace(body, records.length ? records.map(function (record) {
-          return h("tr", null, [
-            h("td", { class: "mono num", text: String(record.number) }),
-            h("td", { class: "mono instant", text: fmtClock(record.ts) }),
-            h("td", { class: "mono endpoint", text: endpoint(record.src, record.src_port) }),
-            h("td", { class: "mono endpoint", text: endpoint(record.dst, record.dst_port) }),
-            h("td", null, badgeFor(record.protocol)),
-            h("td", { class: "mono", text: record.tcp_flags || "—" }),
-            h("td", { class: "mono num", text: record.ttl === null ? "—" : String(record.ttl) }),
-            h("td", { class: "mono num", text: record.size + " o" }),
-            h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
-          ]);
+          return packetTableRow(record);
         }) : emptyRow(9, "Aucun paquet capturé pour l'instant."));
+        suivreNouveaux();
       }).catch(function (error) {
         counter.textContent = "Erreur : " + error.message;
       });
+    }
+
+    /* Les paquets les plus recents arrivent en tete. On ne repositionne la vue
+       que si l'utilisateur est deja en haut : le remonter de force pendant qu'il
+       lit une ligne plus bas rendrait la liste impossible a consulter. */
+    function suivreNouveaux() {
+      var suivi = $("#packet-follow");
+      var zone = $("#packet-scroll");
+      if (!suivi || !zone || !suivi.checked) return;
+      if (zone.scrollTop < 60) zone.scrollTop = 0;
     }
 
     searchInput.addEventListener("input", function () {
@@ -582,9 +636,31 @@
     });
     protocolSelect.addEventListener("change", load);
 
+    /* L'identification geographique se fait en arriere-plan, une adresse a la
+       fois. Tant qu'il en reste, un tiret dans la colonne Pays ne veut pas dire
+       « adresse sans pays » : on le dit explicitement. */
+    function noteGeographique() {
+      var note = $("#geo-note");
+      if (!note) return;
+      api("/api/stats").then(function (stats) {
+        var attente = stats.geo_pending || 0;
+        var connues = stats.geo_known || 0;
+        if (attente > 0) {
+          note.textContent = "· " + attente + " adresse(s) en cours d'identification";
+          note.title = "Les tirets de la colonne Pays correspondent à des adresses "
+                     + "pas encore identifiées, pas à des adresses sans pays.";
+        } else {
+          note.textContent = connues ? "· " + connues + " adresse(s) identifiée(s)" : "";
+          note.title = "";
+        }
+      }).catch(function () { /* l'absence de cette note n'empeche pas la lecture */ });
+    }
+
     window.__pkaRefresh = load;
     load();
+    noteGeographique();
     setInterval(load, REFRESH_MS);
+    setInterval(noteGeographique, 10000);
   }
 
   /* ------------------------------------------------------- 3. communications */
@@ -1104,6 +1180,165 @@
     });
   }
 
+  /* ----------------------------------------------------- 9. detail d'un paquet */
+
+  function initPacketDetail() {
+    var zone = $("#packet-body");
+    if (!zone) return;
+
+    var numero = window.PACKET_NUMBER;
+    if (!numero) {
+      replace(zone, h("p", { class: "empty", text: "Aucun paquet n'a ete designe." }));
+      return;
+    }
+
+    api("/api/packet?number=" + numero).then(function (data) {
+      afficherPaquet(zone, data.packet || {});
+    }).catch(function (erreur) {
+      replace(zone, h("div", { class: "callout callout--warning" }, [
+        h("h3", { text: "Contenu indisponible" }),
+        h("p", { text: erreur.message })
+      ]));
+    });
+  }
+
+  function afficherPaquet(zone, paquet) {
+    var dissection = paquet.dissection || {};
+    var morceaux = [];
+
+    var resume = [
+      ["Numero", String(paquet.number)],
+      ["Instant", fmtClock(paquet.ts)],
+      ["Protocole", paquet.protocol || "?"],
+      ["Taille", (paquet.size || 0) + " octets"],
+      ["Source", endpoint(paquet.src, paquet.src_port)],
+      ["Destination", endpoint(paquet.dst, paquet.dst_port)]
+    ];
+    if (paquet.domain) resume.push(["Nom de domaine", paquet.domain]);
+    if (paquet.geo && !paquet.geo.error) {
+      resume.push(["Pays (source externe)",
+                   (paquet.geo.country || "—") + (paquet.geo.city ? " · " + paquet.geo.city : "")]);
+      if (paquet.geo.org) resume.push(["Organisation", paquet.geo.org]);
+    }
+
+    var enfants = [];
+    resume.forEach(function (paire) {
+      enfants.push(h("dt", { text: paire[0] }));
+      enfants.push(h("dd", { class: "mono", text: paire[1] }));
+    });
+    morceaux.push(h("section", { class: "panel" }, [
+      h("h2", { class: "panel-title", text: "Resume du paquet" }),
+      h("dl", { class: "detail-list" }, enfants)
+    ]));
+
+    if (dissection.error) {
+      morceaux.push(h("div", { class: "callout callout--warning" }, [
+        h("h3", { text: "Dissection partielle" }),
+        h("p", { text: dissection.error })
+      ]));
+    }
+
+    var couches = h("section", { class: "panel" }, [
+      h("h2", { class: "panel-title", text: "Couches du protocole" }),
+      h("p", { class: "panel-note",
+               text: "Chaque bloc est un protocole empile dans le paquet, avec les valeurs reellement lues. Le nom technique du champ est conserve pour permettre de le retrouver dans la documentation du protocole." })
+    ]);
+    var listeCouches = dissection.layers || [];
+    if (!listeCouches.length) {
+      couches.append(h("p", { class: "empty", text: "Aucune couche n'a pu etre identifiee." }));
+    }
+    listeCouches.forEach(function (couche) {
+      var lignes = (couche.fields || []).map(function (champ) {
+        return h("tr", null, [
+          h("td", { class: "mono", text: champ.name }),
+          h("td", { text: champ.label }),
+          h("td", { class: "mono detail-value", text: champ.value })
+        ]);
+      });
+      couches.append(h("div", { class: "layer" }, [
+        h("h3", { class: "layer-title", text: couche.name }),
+        h("p", { class: "layer-summary mono", text: couche.summary || "" }),
+        h("div", { class: "table-wrap" }, h("table", { class: "table table--dense" }, [
+          h("thead", null, h("tr", null, [
+            h("th", { scope: "col", text: "Champ" }),
+            h("th", { scope: "col", text: "Signification" }),
+            h("th", { scope: "col", text: "Valeur" })
+          ])),
+          h("tbody", null, lignes)
+        ]))
+      ]));
+    });
+    morceaux.push(couches);
+
+    var lignesHex = dissection.hex || [];
+    var texteHex = lignesHex.map(function (ligne) {
+      return ligne.offset + "  " + ligne.hex + "  " + ligne.ascii;
+    }).join("\n");
+    morceaux.push(h("section", { class: "panel" }, [
+      h("h2", { class: "panel-title", text: "Contenu brut" }),
+      h("p", { class: "panel-note",
+               text: "Octets tels qu'ils ont circule sur le reseau : a gauche leur position, au centre leur valeur en hexadecimal, a droite leur equivalent en caracteres. Un point remplace un octet non affichable." }),
+      h("pre", { class: "hexdump", text: texteHex || "(aucun contenu)" })
+    ]));
+
+    replace(zone, morceaux);
+  }
+
+  /* ------------------------------------------------------- 10. geolocalisation */
+
+  function initGeolocation() {
+    var corps = $("#geo-rows");
+    if (!corps) return;
+
+    function remplirBarres(selecteur, adresses, champ) {
+      var zone = $(selecteur);
+      if (!zone) return;
+      var compteurs = {};
+      adresses.forEach(function (adresse) {
+        var cle = adresse[champ];
+        if (!cle) return;
+        compteurs[cle] = (compteurs[cle] || 0) + (adresse.packets || 0);
+      });
+      var elements = Object.keys(compteurs).map(function (cle) {
+        return { name: cle, count: compteurs[cle] };
+      }).sort(function (a, b) { return b.count - a.count; }).slice(0, 8);
+
+      replace(zone, elements.length
+        ? barRows(elements, "name", "count", "")
+        : h("p", { class: "empty", text: "Aucune donnee pour l'instant." }));
+    }
+
+    function charger() {
+      api("/api/geolocation?limit=300").then(function (data) {
+        var toutes = data.addresses || [];
+        var connues = toutes.filter(function (adresse) { return !adresse.error; });
+
+        $("#geo-count").textContent = connues.length
+          ? connues.length + " adresse(s) distante(s) identifiee(s)"
+          : "Aucune adresse distante identifiee pour l'instant.";
+
+        replace(corps, connues.length ? connues.map(function (adresse) {
+          return h("tr", null, [
+            h("td", { class: "mono", text: adresse.ip || "—" }),
+            h("td", { text: adresse.country || "—" }),
+            h("td", { text: adresse.city || "—" }),
+            h("td", { class: "geo-org", text: adresse.org || adresse.isp || "—" }),
+            h("td", { class: "mono", text: adresse.asn ? "AS" + adresse.asn : "—" }),
+            h("td", { class: "mono num", text: String(adresse.packets || 0) })
+          ]);
+        }) : emptyRow(6, "Aucune adresse distante identifiee pour l'instant."));
+
+        remplirBarres("#geo-countries", connues, "country");
+        remplirBarres("#geo-orgs", connues, "org");
+      }).catch(function (erreur) {
+        $("#geo-count").textContent = "Erreur : " + erreur.message;
+      });
+    }
+
+    charger();
+    setInterval(charger, REFRESH_MS * 4);
+  }
+
   /* ------------------------------------------------------------------ demarrage */
 
   function boot() {
@@ -1116,6 +1351,8 @@
     initEvents();
     initHistory();
     initProtocols();
+    initPacketDetail();
+    initGeolocation();
     initTheme();
   }
 

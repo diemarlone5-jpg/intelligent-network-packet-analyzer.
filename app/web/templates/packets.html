@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Paquets — Packet Analyzer{% endblock %}
+{% block body_class %}page-fill{% endblock %}
 {% block heading %}Paquets capturés{% endblock %}
-{% block subheading %}Chaque ligne est un paquet réellement observé, sans interprétation.{% endblock %}
+{% block subheading %}Chaque ligne est un paquet réellement observé. Cliquez pour voir son contenu.{% endblock %}
 
 {% block content %}
 
@@ -26,12 +27,43 @@
     </select>
   </label>
 
+  <label class="field field--check">
+    <input id="packet-follow" type="checkbox" checked>
+    <span>Suivre les nouveaux</span>
+  </label>
+
   <p class="toolbar-note" id="packet-count">—</p>
+  <span class="toolbar-note" id="geo-note"></span>
+
+  <a class="btn btn--ghost btn--small" href="/api/export/packets.csv" download>
+    Exporter en CSV
+  </a>
+
+  <details class="toolbar-help">
+    <summary>Aide</summary>
+    <div class="toolbar-help-body">
+      <p>
+        Cette liste ne montre que des <strong>faits observés</strong> : qui, vers qui,
+        quel protocole, quelle taille. <strong>Cliquez sur une ligne</strong> pour ouvrir
+        le détail du paquet — couches empilées et contenu brut.
+      </p>
+      <p>
+        La colonne <strong>Pays</strong> vient d'une base externe interrogée
+        automatiquement : elle situe l'adresse <em>déclarée</em> auprès des registres
+        Internet, pas la position d'une personne. Un tiret signifie « information pas
+        encore obtenue », pas « adresse anonyme ».
+      </p>
+      <p>
+        Le liseré de couleur à gauche reprend les conventions de Wireshark :
+        bleu pour DNS, violet pour TLS, vert pour HTTP, orange pour ICMP.
+      </p>
+    </div>
+  </details>
 </section>
 
-<section class="panel">
-  <div class="table-wrap">
-    <table class="table table--dense">
+<section class="panel panel--fill">
+  <div class="table-wrap" id="packet-scroll">
+    <table class="table table--dense table--packets">
       <thead>
         <tr>
           <th scope="col">N°</th>
@@ -39,9 +71,9 @@
           <th scope="col">Source</th>
           <th scope="col">Destination</th>
           <th scope="col">Protocole</th>
-          <th scope="col">Drapeaux</th>
-          <th scope="col">TTL</th>
           <th scope="col">Taille</th>
+          <th scope="col">Pays</th>
+          <th scope="col">Organisation</th>
           <th scope="col">Résumé</th>
         </tr>
       </thead>
@@ -51,14 +83,5 @@
     </table>
   </div>
 </section>
-
-<div class="callout callout--info">
-  <h3>Comment lire cette liste</h3>
-  <p>
-    Cette page ne montre que des <strong>faits observés</strong> : qui, vers qui, quel
-    protocole, quelle taille, quels drapeaux. Pour obtenir le sens de ces
-    observations, ouvrez la page <a href="/flows">Communications</a>.
-  </p>
-</div>
 
 {% endblock %}

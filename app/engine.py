@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections import Counter, deque
+from collections import Counter, OrderedDict, deque
 from typing import Any
 
 from app.analysis.detectors import BehaviorAnalyzer, DetectionConfig
@@ -63,6 +63,18 @@ class AnalyzerEngine:
         self._errors: deque[tuple[float, str]] = deque(maxlen=50)
         self._notes: deque[tuple[float, str]] = deque(maxlen=50)
 
+        # Octets bruts des paquets recents, pour la vue detaillee (arbre des
+        # couches et vidage hexadecimal). Bornes comme le tampon d'affichage :
+        # conserver tout le trafic ferait exploser la memoire sans rien apporter
+        # a l'analyse.
+        self._raw: "OrderedDict[int, bytes]" = OrderedDict()
+
+        # Geographie des adresses distantes, alimentee en arriere-plan. La liste
+        # des paquets doit rester instantanee : elle ne lit donc que ce cache,
+        # jamais le reseau.
+        self._intel: dict[str, dict] = {}
+        self._enrich_pending: deque[str] = deque(maxlen=500)
+
         # Compteurs incrementaux : les statistiques doivent rester instantanees
         # meme apres plusieurs centaines de milliers de paquets.
         self._counter = 0
@@ -79,6 +91,7 @@ class AnalyzerEngine:
         self.nat64_prefix: str | None = None
         self._last_persist = 0.0
         self._thread: threading.Thread | None = None
+        self._enrich_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     # ==================================================================
@@ -117,6 +130,13 @@ class AnalyzerEngine:
         self._thread = threading.Thread(target=self._analysis_loop,
                                         name="analyzer-engine", daemon=True)
         self._thread.start()
+
+        # Fil d'enrichissement : il ne fait rien tant qu'aucune adresse
+        # inconnue n'est observee, mais doit tourner des le demarrage pour
+        # repondre sans delai a la premiere capture.
+        self._enrich_thread = threading.Thread(target=self._enrichment_loop,
+                                               name="analyzer-enrichment", daemon=True)
+        self._enrich_thread.start()
 
     def shutdown(self) -> None:
         """Arrete proprement la capture puis le fil d'analyse."""
@@ -181,6 +201,7 @@ class AnalyzerEngine:
             self._packets.clear()
             self._events.clear()
             self._pending_packets.clear()
+            self._raw.clear()
             self.flows.clear()
             self._counter = 0
             self._protocols.clear()
@@ -191,6 +212,8 @@ class AnalyzerEngine:
             self._total_bytes = 0
             self.agent.reset_counters()
             self.session_id = None
+            # Le cache geographique est conserve : une adresse deja identifiee
+            # n'a pas besoin d'etre redemandee a la source externe.
 
     # ==================================================================
     # Traitement d'un paquet
@@ -205,6 +228,13 @@ class AnalyzerEngine:
             if len(self._pending_packets) < PACKET_SAMPLE_LIMIT:
                 self._pending_packets.append(record)
 
+            # Octets d'origine : `original` est pose par Scapy lors de la
+            # dissection, ce qui evite de reconstruire le paquet. On ne
+            # conserve rien au-dela du tampon d'affichage.
+            self._raw[record.number] = getattr(packet, "original", None) or bytes(packet)
+            while len(self._raw) > self.settings.max_packets_buffer:
+                self._raw.popitem(last=False)
+
             self.flows.observe(record)
 
             # Compteurs statistiques
@@ -216,6 +246,58 @@ class AnalyzerEngine:
                 self._ports[f"{record.dst_port}/{record.transport or '?'}"] += 1
             if record.domain:
                 self._domains[record.domain] += 1
+
+            self._queue_geolocation(record)
+
+    # ------------------------------------------------------------------
+    def _counterparty(self, record: PacketRecord) -> str | None:
+        """Adresse de l'interlocuteur : celle qui n'est pas la machine locale.
+
+        C'est celle qui a du sens a geolocaliser. Pour un echange purement
+        local, il n'y en a pas.
+        """
+        src_local = self.parser.is_local(record.src)
+        dst_local = self.parser.is_local(record.dst)
+        if src_local and not dst_local:
+            return record.dst
+        if dst_local and not src_local:
+            return record.src
+        return None
+
+    def _queue_geolocation(self, record: PacketRecord) -> None:
+        """Met en file l'adresse distante a enrichir, si utile et pas deja connue."""
+        if self.enricher is None or not self.settings.enrich_enabled:
+            return
+        adresse = self._counterparty(record)
+        if not adresse or adresse in self._intel:
+            return
+        if classify_address(adresse) != "public":
+            return
+        if adresse in self._enrich_pending:
+            return
+        self._enrich_pending.append(adresse)
+
+    def _enrichment_loop(self) -> None:
+        """Enrichit les adresses distantes en arriere-plan, une par une.
+
+        En dehors du chemin critique : l'affichage des paquets ne doit jamais
+        attendre un appel reseau, et la source externe impose son propre rythme.
+        """
+        while not self._stop_event.is_set():
+            adresse = None
+            with self._lock:
+                if self._enrich_pending:
+                    adresse = self._enrich_pending.popleft()
+            if adresse is None:
+                self._stop_event.wait(1.0)
+                continue
+            try:
+                intel = self.enricher.lookup(adresse)
+                with self._lock:
+                    self._intel[adresse] = intel.to_dict()
+            except Exception:
+                with self._lock:
+                    self._intel[adresse] = {"ip": adresse, "error": "enrichissement indisponible"}
 
     def _record_error(self, message: str) -> None:
         """Consigne un probleme reel. Affiche comme avertissement a l'utilisateur."""
@@ -309,7 +391,50 @@ class AnalyzerEngine:
                 or (r.domain and needle in r.domain)
                 or needle in (r.tcp_flags or "").lower()
             ]
-        return [r.to_dict() for r in records[:limit]]
+        return [self._packet_view(r) for r in records[:limit]]
+
+    def _packet_view(self, record: PacketRecord) -> dict:
+        """Vue enrichie d'un paquet : la geographie de l'interlocuteur y est
+        jointe depuis le cache local, sans aucun appel reseau."""
+        data = record.to_dict()
+        adresse = self._counterparty(record)
+        data["geo_ip"] = adresse
+        data["geo"] = self._intel.get(adresse) if adresse else None
+        return data
+
+    def packet_detail(self, number: int) -> dict | None:
+        """Vue complete d'un paquet : arbre des couches et contenu brut.
+
+        C'est l'equivalent des deux panneaux du bas de Wireshark. Retourne None
+        si le paquet n'est plus dans le tampon (ou n'a jamais existe).
+        """
+        from app.analysis.dissect import dissect
+
+        with self._lock:
+            record = next((r for r in self._packets if r.number == number), None)
+            raw = self._raw.get(number)
+
+        if record is None:
+            return None
+
+        data = self._packet_view(record)
+        data["dissection"] = dissect(raw or b"")
+        data["raw_available"] = bool(raw)
+        return data
+
+    def geolocation_snapshot(self, limit: int = 200) -> list[dict]:
+        """Adresses distantes geolocalisees, les plus vues en premier."""
+        with self._lock:
+            compteurs = Counter(self._sources) + Counter(self._destinations)
+            cache = dict(self._intel)
+
+        resultats = []
+        for adresse, info in cache.items():
+            entree = dict(info)
+            entree["packets"] = compteurs.get(adresse, 0)
+            resultats.append(entree)
+        resultats.sort(key=lambda item: item.get("packets", 0), reverse=True)
+        return resultats[:limit]
 
     def flow_snapshot(self, limit: int = 200, only_active: bool = False) -> list[dict]:
         flows = self.flows.snapshot()
@@ -437,6 +562,11 @@ class AnalyzerEngine:
             "top_ports": [{"port": p, "count": c} for p, c in ports],
             "top_domains": [{"domain": d, "count": c} for d, c in domains],
             "hosts_to_watch": sorted(activity)[:8],
+            # L'identification geographique se fait en arriere-plan : ce compteur
+            # permet a l'interface d'expliquer un tiret, plutot que de laisser
+            # croire a une adresse sans pays.
+            "geo_pending": len(self._enrich_pending),
+            "geo_known": len(self._intel),
             "public_destinations": sorted({
                 d for d, _ in destinations if classify_address(d) == "public"
             })[:12],

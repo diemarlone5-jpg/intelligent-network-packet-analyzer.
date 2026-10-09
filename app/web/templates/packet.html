@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Paquet — Packet Analyzer{% endblock %}
+{% block heading %}Détail d'un paquet{% endblock %}
+{% block subheading %}Couches empilées et contenu brut, tels qu'ils ont été observés.{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <a class="btn btn--ghost btn--small" href="/packets">← Retour à la liste</a>
+  <p class="toolbar-note" id="packet-ref">Paquet n° {{ packet_number }}</p>
+</section>
+
+<div id="packet-body">
+  <p class="empty">Chargement…</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>window.PACKET_NUMBER = {{ packet_number }};</script>
+{% endblock %}

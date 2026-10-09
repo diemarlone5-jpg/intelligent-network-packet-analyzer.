@@ -8,10 +8,12 @@ Ces points d'entree sont aussi la surface d'API documentee du projet
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.capture.interfaces import capture_available, list_interfaces, pick_default_interface
 
@@ -129,6 +131,120 @@ async def flows(request: Request, limit: int = Query(200, ge=1, le=2000),
         "ok": True,
         "flows": engine_of(request).flow_snapshot(limit=limit, only_active=active_only),
     }
+
+
+@router.get("/packet", summary="Detail d'un paquet : couches et contenu brut")
+async def packet_detail(request: Request, number: int = Query(..., ge=1)):
+    """Equivalent des panneaux « arbre des protocoles » et « vidage » de Wireshark."""
+    result = engine_of(request).packet_detail(number)
+    if result is None:
+        return JSONResponse(
+            {"ok": False, "error": "Ce paquet n'est plus dans la memoire d'analyse. "
+                                   "Seuls les paquets recents conservent leur contenu."},
+            status_code=404,
+        )
+    return {"ok": True, "packet": result}
+
+
+@router.get("/geolocation", summary="Origine geographique des adresses distantes")
+async def geolocation(request: Request, limit: int = Query(200, ge=1, le=2000)):
+    return {"ok": True, "addresses": engine_of(request).geolocation_snapshot(limit=limit)}
+
+
+def _csv_safe(value) -> str:
+    """Neutralise les valeurs qu'un tableur interpreterait comme une formule.
+
+    Un nom de domaine peut commencer par « = » ou « + » : ouvert dans Excel, il
+    serait execute comme une formule. On prefixe par une apostrophe pour forcer
+    le texte brut. C'est la recommandation OWASP et cela protege l'utilisateur
+    qui ouvre l'export.
+    """
+    texte = "" if value is None else str(value)
+    if texte[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + texte
+    return texte
+
+
+@router.get("/export/packets.csv", summary="Export CSV des paquets")
+async def export_packets(request: Request, limit: int = Query(5000, ge=1, le=50000)):
+    return _csv_response(
+        "paquets.csv",
+        ["numero", "horodatage", "protocole", "source", "port_source",
+         "destination", "port_destination", "taille_octets", "drapeaux_tcp",
+         "ttl", "domaine", "pays", "organisation", "resume"],
+        _packet_rows(engine_of(request).packet_snapshot(limit=limit)),
+    )
+
+
+@router.get("/export/flows.csv", summary="Export CSV des communications")
+async def export_flows(request: Request, limit: int = Query(5000, ge=1, le=50000)):
+    return _csv_response(
+        "communications.csv",
+        ["debut", "fin", "source", "port_source", "destination", "port_destination",
+         "transport", "protocole", "service", "etat", "sens", "paquets", "octets"],
+        _flow_rows(engine_of(request).flow_snapshot(limit=limit)),
+    )
+
+
+def _packet_rows(paquets: list[dict]):
+    for paquet in paquets:
+        geo = paquet.get("geo") or {}
+        yield [
+            paquet.get("number"),
+            paquet.get("ts"),
+            paquet.get("protocol"),
+            paquet.get("src"),
+            paquet.get("src_port"),
+            paquet.get("dst"),
+            paquet.get("dst_port"),
+            paquet.get("size"),
+            paquet.get("tcp_flags"),
+            paquet.get("ttl"),
+            paquet.get("domain"),
+            geo.get("country"),
+            geo.get("org"),
+            paquet.get("info"),
+        ]
+
+
+def _flow_rows(communications: list[dict]):
+    for flux in communications:
+        yield [
+            flux.get("first_seen"),
+            flux.get("last_seen"),
+            flux.get("src"),
+            flux.get("src_port"),
+            flux.get("dst"),
+            flux.get("dst_port"),
+            flux.get("transport"),
+            flux.get("protocol"),
+            flux.get("service"),
+            flux.get("state_label") or flux.get("state"),
+            flux.get("direction"),
+            flux.get("packets"),
+            flux.get("bytes"),
+        ]
+
+
+def _csv_response(nom: str, entetes: list[str], lignes) -> Response:
+    """Fabrique une reponse CSV telechargeable.
+
+    Le point-virgule est le separateur attendu par Excel en configuration
+    francaise ; l'encodage UTF-8 avec BOM garantit l'affichage correct des
+    accents.
+    """
+    tampon = io.StringIO()
+    ecrivain = csv.writer(tampon, delimiter=";", lineterminator="\r\n")
+    ecrivain.writerow(entetes)
+    for ligne in lignes:
+        ecrivain.writerow([_csv_safe(valeur) for valeur in ligne])
+
+    contenu = "\ufeff" + tampon.getvalue()
+    return Response(
+        content=contenu,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nom}"'},
+    )
 
 
 @router.get("/flow", summary="Explication detaillee d'une communication")

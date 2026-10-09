@@ -598,6 +598,166 @@ code, .mono {
   color: var(--text-muted);
 }
 .table tbody tr:hover td { background: var(--surface-2); }
+
+/* --------------------------------------------------------------------------
+   PAGE PLEIN ECRAN (liste des paquets)
+
+   Objectif : ne voir que les paquets, et ne jamais avoir a faire defiler la
+   PAGE pour en chercher. Le tableau occupe toute la hauteur disponible et
+   defile a l'interieur de lui-meme ; l'en-tete des colonnes reste visible en
+   permanence. C'est le comportement d'une liste de paquets d'analyseur.
+
+   Ces regles sont portees par `body.page-fill`, donc limitees a la page qui
+   en a besoin : les autres pages continuent de defiler normalement.
+   -------------------------------------------------------------------------- */
+
+body.page-fill { overflow: hidden; }
+
+body.page-fill .layout { height: 100vh; overflow: hidden; }
+
+body.page-fill .main { min-height: 0; overflow: hidden; }
+
+body.page-fill .content {
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 26px 14px;
+  gap: 12px;
+}
+
+/* Le pied de page n'apporte rien quand on lit une liste : il vole de la place
+   utile et oblige a defiler pour rien. */
+body.page-fill .footer { display: none; }
+
+body.page-fill .toolbar { flex: 0 0 auto; }
+
+/* Chaque bloc de chrome vole de la hauteur au tableau. En mode plein ecran, on
+   reduit donc l'en-tete de page a sa fonction : le titre et les commandes de
+   capture. Le sous-titre explicatif est masque, et les intitules des champs du
+   filtre sont rendus invisibles sans etre retires de l'arbre d'accessibilite :
+   un lecteur d'ecran continue de les annoncer. */
+body.page-fill .topbar { padding: 9px 26px; align-items: center; }
+body.page-fill .page-sub { display: none; }
+body.page-fill .page-title { font-size: 15px; }
+
+body.page-fill .toolbar { padding: 8px 12px; }
+body.page-fill .toolbar .field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* La navigation doit tenir dans la hauteur elle aussi, sinon elle ajoute sa
+   propre barre de defilement a cote de celle du tableau. */
+body.page-fill .sidebar { padding: 14px 12px; gap: 14px; }
+
+/* Le panneau devient un conteneur souple : c'est lui, et non la page, qui
+   distribue la hauteur entre ses enfants. `min-height: 0` est indispensable,
+   sans quoi l'enfant flex refuse de devenir plus petit que son contenu et
+   deborde au lieu de defiler. */
+body.page-fill .panel--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Le defilement se fait ici : verticalement pour parcourir les paquets,
+   horizontalement pour atteindre les dernieres colonnes. */
+body.page-fill .panel--fill .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0 0 2px;
+  overflow: auto;
+}
+
+/* En-tete des colonnes toujours visible pendant le defilement.
+
+   `border-collapse: separate` est obligatoire ici : sur un tableau en
+   `collapse`, le moteur n'applique pas `position: sticky` aux cellules, et
+   l'en-tete disparait des qu'on defile. Comme les cellules ne portent qu'une
+   bordure basse, le rendu reste identique. */
+body.page-fill .table--packets {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+body.page-fill .table--packets th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* Lignes plus serrees : l'ecran affiche davantage de paquets, ce qui est le
+   but recherche lorsqu'on parcourt une capture. */
+body.page-fill .table--packets th,
+body.page-fill .table--packets td { padding: 5px 9px; }
+
+/* Une ligne est une cible cliquable : elle doit reagir au survol et au focus
+   clavier, sans quoi rien n'indique que le detail est accessible. */
+.pkt-row { cursor: pointer; }
+.pkt-row:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Reperes de couleur par protocole, sur le principe des regles de colorisation
+   de Wireshark : un lisere a gauche suffit a trier la liste d'un coup d'oeil,
+   sans colorer la ligne entiere qui nuirait a la lecture du texte. */
+.pkt-row > td:first-child { border-left: 3px solid transparent; }
+.pkt--tcp > td:first-child { border-left-color: #6f7f9a; }
+.pkt--udp > td:first-child { border-left-color: #57a8c4; }
+.pkt--dns > td:first-child { border-left-color: #4f8ff7; }
+.pkt--tls > td:first-child { border-left-color: #9d7bf0; }
+.pkt--http > td:first-child { border-left-color: #4fc070; }
+.pkt--arp > td:first-child { border-left-color: #d0a24c; }
+.pkt--icmp > td:first-child { border-left-color: #e0803f; }
+.pkt--ipv6 > td:first-child { border-left-color: #c65fa8; }
+
+/* Colonne d'organisation : elle ne doit pas elargir le tableau a l'infini
+   quand un nom d'operateur est long. */
+.table td.geo-org { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Aide repliable : l'explication reste accessible sans occuper l'ecran.
+   Une page de liste doit montrer la liste. */
+.toolbar-help { position: relative; margin-left: auto; }
+.toolbar-help > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  user-select: none;
+}
+.toolbar-help > summary::-webkit-details-marker { display: none; }
+.toolbar-help > summary:hover { color: var(--text); border-color: var(--accent); }
+.toolbar-help[open] > summary { color: var(--text); border-color: var(--accent); }
+.toolbar-help-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(460px, 88vw);
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.toolbar-help-body p { margin: 0 0 9px; }
+.toolbar-help-body p:last-child { margin-bottom: 0; }
 .table--dense td, .table--dense th { padding: 6px 9px; font-size: 12.5px; }
 .table .mono { background: transparent; border: none; padding: 0; font-size: 12px; }
 

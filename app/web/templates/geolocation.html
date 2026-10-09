@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Géolocalisation — Packet Analyzer{% endblock %}
+{% block heading %}Géolocalisation{% endblock %}
+{% block subheading %}Vers quels pays et quels organismes votre ordinateur communique-t-il ?{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <p class="toolbar-note" id="geo-count">—</p>
+  <a class="btn btn--ghost btn--small" href="/api/export/flows.csv" download>
+    Exporter les communications
+  </a>
+</section>
+
+<section class="grid-2">
+
+  <div class="panel">
+    <h2 class="panel-title">Répartition par pays</h2>
+    <div id="geo-countries" class="bars">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="panel-title">Organismes les plus contactés</h2>
+    <div id="geo-orgs" class="bars">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </div>
+
+</section>
+
+<section class="panel">
+  <h2 class="panel-title">Adresses distantes identifiées</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Adresse</th>
+          <th scope="col">Pays</th>
+          <th scope="col">Ville</th>
+          <th scope="col">Organisation</th>
+          <th scope="col">Réseau (ASN)</th>
+          <th scope="col">Paquets</th>
+        </tr>
+      </thead>
+      <tbody id="geo-rows">
+        <tr><td colspan="6" class="empty">Aucune adresse identifiée pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="callout callout--warning">
+  <h3>Ce que cette page dit — et ce qu'elle ne dit pas</h3>
+  <p>
+    <strong>Fait :</strong> l'adresse IP distante appartient à un bloc réseau
+    enregistré auprès d'un registre Internet, et ce bloc est déclaré dans un pays.
+  </p>
+  <p>
+    <strong>Ce n'est pas :</strong> la position d'une personne. Une adresse peut
+    appartenir à un hébergeur, un réseau privé d'entreprise ou un relais (VPN,
+    Tor, CDN) situé dans un autre pays que l'utilisateur final. Une même
+    destination peut apparaître dans plusieurs pays d'un jour à l'autre.
+  </p>
+  <p>
+    <strong>Réserve :</strong> cette information vient d'une source externe
+    (ipwho.is). Elle n'est pas vérifiée par l'application et peut être
+    incomplète. Les adresses privées de votre réseau local (192.168.x.x,
+    10.x.x.x, fe80::) ne sont volontairement pas envoyées à cette source.
+  </p>
+</div>
+
+{% endblock %}
