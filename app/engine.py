@@ -41,6 +41,26 @@ ANALYSIS_INTERVAL_SECONDS = 3.0
 PACKET_SAMPLE_LIMIT = 3000
 
 
+def _decoder(contenu: bytes) -> tuple[str, bool]:
+    """Decode des octets en texte, et dit si c'en est vraiment.
+
+    Un contenu chiffre decode « de force » produit une suite de caracteres de
+    remplacement : l'afficher comme du texte ferait croire a un probleme du
+    logiciel plutot qu'a du chiffrement. On mesure donc la part de caracteres
+    invalides avant de trancher.
+    """
+    if not contenu:
+        return "", True
+    try:
+        texte = contenu.decode("utf-8")
+    except UnicodeDecodeError:
+        return "", False
+    remplacements = texte.count("\ufffd")
+    if remplacements / max(1, len(texte)) > 0.02:
+        return "", False
+    return texte, True
+
+
 class AnalyzerEngine:
     """Service central : un seul exemplaire par processus."""
 
@@ -579,6 +599,191 @@ class AnalyzerEngine:
             "others": {"count": max(0, reste), "bytes": max(0, octets_reste)},
             "total_bytes": total,
             "total_peers": len(agregat),
+        }
+
+    def follow_stream(self, cle: str, limite_paquets: int = 600,
+                      limite_octets: int = 200_000) -> dict | None:
+        """Reconstitue l'echange d'une communication, sens par sens.
+
+        Deux precautions, parce qu'une reconstitution naive induit en erreur :
+
+        1. On classe par NUMERO DE SEQUENCE, pas par instant d'arrivee. Sur un
+           reseau charge, les paquets arrivent desordonnes ; les presenter dans
+           l'ordre d'arrivee donnerait un texte incoherent, et l'utilisateur en
+           conclurait que la communication est illisible.
+        2. On ne renumerote pas les octets manquants. S'il y a un trou, on le
+           SIGNALE : recoller les morceaux sans le dire produirait un texte
+           continu qui n'a jamais circule tel quel.
+
+        Un contenu chiffre (TLS) reste chiffre : on le dit, on ne le presente pas
+        comme du texte illisible par accident du logiciel.
+        """
+        flux = None
+        for candidat in self.flows.snapshot():
+            if candidat.key == cle:
+                flux = candidat
+                break
+        if flux is None:
+            return None
+
+        with self._lock:
+            paquets = list(self._packets)[-4000:]
+            bruts = dict(self._raw)
+
+        def appartient(record) -> bool:
+            """Le paquet fait-il partie de cette communication, dans un sens ou
+            dans l'autre ? On compare les deux orientations."""
+            if record.transport != "TCP":
+                return False
+            meme_sens = (record.src == flux.src and record.dst == flux.dst
+                         and record.src_port == flux.src_port
+                         and record.dst_port == flux.dst_port)
+            sens_inverse = (record.src == flux.dst and record.dst == flux.src
+                            and record.src_port == flux.dst_port
+                            and record.dst_port == flux.src_port)
+            return meme_sens or sens_inverse
+
+        selection = [r for r in paquets if appartient(r)][:limite_paquets]
+        if not selection:
+            return {
+                "key": cle, "sens": [], "octets_total": 0,
+                "chiffre": False, "note": "Les paquets de cette communication "
+                                          "ne sont plus en mémoire.",
+            }
+
+        from scapy.all import Raw, TCP
+
+        sens: dict[str, list[dict]] = {"aller": [], "retour": []}
+        for record in selection:
+            octets = bruts.get(record.number)
+            if not octets:
+                continue
+            try:
+                paquet = self._paquet_depuis_octets(
+                    octets, LINKTYPE_ETHERNET, record.ts)
+                if paquet is None or TCP not in paquet:
+                    continue
+                charge = bytes(paquet[Raw]) if Raw in paquet else b""
+                sequence = int(paquet[TCP].seq)
+                drapeaux = str(paquet[TCP].flags)
+            except Exception:
+                continue
+
+            est_aller = (record.src == flux.src and record.src_port == flux.src_port)
+            sens["aller" if est_aller else "retour"].append({
+                "seq": sequence, "ts": record.ts, "donnees": charge,
+                "flags": drapeaux, "number": record.number,
+            })
+
+        # Le sens aller est celui de l'initiateur : c'est lui qui a envoye le
+        # premier paquet observe, pas forcement le SYN si la capture a commence
+        # en cours de route.
+        return self._assembler(flux, sens, limite_octets)
+
+    @staticmethod
+    def _assembler(flux, sens: dict, limite_octets: int) -> dict:
+        """Ordonne les segments par numero de sequence et decode le contenu."""
+        sortie = []
+        chiffre = False
+        trous = 0
+
+        for nom, etiquette in (("aller", "de l'initiateur vers le destinataire"),
+                               ("retour", "du destinataire vers l'initiateur")):
+            segments = sens[nom]
+            if not segments:
+                continue
+            segments.sort(key=lambda s: s["seq"])
+
+            # Deduplication : une retransmission porte le meme numero de
+            # sequence. La compter deux fois dupliquerait le texte.
+            uniques = []
+            vus = set()
+            for segment in segments:
+                if segment["seq"] in vus:
+                    continue
+                vus.add(segment["seq"])
+                uniques.append(segment)
+
+            contenu = bytearray()
+            attendu = None
+            for segment in uniques:
+                if attendu is not None and segment["seq"] != attendu:
+                    # Un trou : on l'annonce au lieu de recoller.
+                    trous += 1
+                    contenu.extend(b"\n[... octets manquants ...]\n")
+                contenu.extend(segment["donnees"])
+
+                # Le SYN et le FIN consomment chacun un numero de sequence sans
+                # transporter d'octet. Ne pas en tenir compte ferait apparaitre
+                # un faux trou d'un octet dans toute conversation dont on a vu
+                # l'ouverture ou la fermeture.
+                consomme = len(segment["donnees"])
+                drapeaux = segment.get("flags") or ""
+                if "S" in drapeaux or "F" in drapeaux:
+                    consomme += 1
+                attendu = segment["seq"] + consomme
+
+                if len(contenu) > limite_octets:
+                    contenu.extend(b"\n[... suite tronquee ...]\n")
+                    break
+
+            texte, est_texte = _decoder(contenu)
+            if not est_texte:
+                chiffre = True
+
+            sortie.append({
+                "direction": nom,
+                "label": etiquette,
+                "octets": len(contenu),
+                "segments": len(uniques),
+                "texte": texte if est_texte else None,
+                "binaire": not est_texte,
+                # Un sens peut ne porter que de la signalisation (SYN, ACK) et
+                # aucun contenu. L'afficher comme un bloc vide laisserait croire
+                # a une reconstitution ratee.
+                "sans_contenu": len(contenu) == 0,
+            })
+
+        octets_total = sum(s["octets"] for s in sortie)
+
+        # Le debut de la conversation est-il encore en memoire ? Le moteur ne
+        # garde que les derniers paquets : si le premier segment reconstitue est
+        # nettement posterieur au debut observe de la communication, c'est que le
+        # commencement a ete evince. Sans le dire, l'utilisateur croirait lire
+        # l'echange depuis son debut.
+        premier = min((segment["ts"] for nom in sens for segment in sens[nom]),
+                      default=None)
+        debut_connu = getattr(flux, "first_seen", 0.0)
+        debut_manquant = bool(
+            premier is not None and debut_connu
+            and premier - debut_connu > 2.0)
+
+        motifs = []
+        if chiffre:
+            motifs.append("le contenu est chiffré (TLS ou équivalent) ou binaire, "
+                          "donc illisible : la reconstitution montre ce qui a "
+                          "circulé, pas ce qui a été dit")
+        if debut_manquant:
+            motifs.append("le début de la communication n'est plus en mémoire "
+                          "(le moteur ne conserve que les paquets les plus "
+                          "récents), la reconstitution commence donc en cours "
+                          "de route")
+        if trous:
+            motifs.append("des octets manquent au milieu : la capture n'a pas vu "
+                          "tous les paquets, et les emplacements sont signalés")
+
+        note = None
+        if motifs:
+            note = "À savoir : " + " ; ".join(motifs) + "."
+
+        return {
+            "key": flux.key,
+            "sens": sortie,
+            "octets_total": octets_total,
+            "chiffre": chiffre,
+            "trous": trous,
+            "debut_manquant": debut_manquant,
+            "note": note,
         }
 
     def packet_snapshot(self, limit: int = 200, protocol: str | None = None,

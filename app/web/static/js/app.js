@@ -1415,7 +1415,63 @@
       });
     }
 
+    /* Suivre la conversation : reconstitution du contenu echange, sens par sens.
+       Chargee a la demande seulement : rien ne justifie de re-disséquer tous les
+       paquets d'une communication si l'utilisateur ne le demande pas. */
+    var streamBtn = $("#btn-stream");
+    var streamZone = $("#stream-zone");
+    if (streamBtn && streamZone) {
+      streamBtn.addEventListener("click", function () {
+        streamBtn.disabled = true;
+        streamBtn.textContent = "Reconstitution…";
+        api("/api/stream?key=" + encodeURIComponent(key)).then(function (data) {
+          rendreFlux(streamZone, data.stream);
+        }).catch(function (erreur) {
+          replace(streamZone, h("p", { class: "empty", text: erreur.message }));
+        }).finally(function () {
+          streamBtn.disabled = false;
+          streamBtn.textContent = "Reconstituer l'échange";
+        });
+      });
+    }
+
     load();
+  }
+
+  /* Reconstitution d'une conversation : un bloc par sens de circulation. */
+  function rendreFlux(zone, flux) {
+    if (!zone) return;
+    if (!flux || !flux.sens || !flux.sens.length) {
+      replace(zone, h("p", { class: "empty", text: (flux && flux.note) ||
+        "Aucun contenu à reconstituer pour cette communication." }));
+      return;
+    }
+
+    var blocs = [];
+    if (flux.note) {
+      // La reserve vient en premier : elle change la lecture de tout ce qui
+      // suit, et la placer apres reviendrait a la cacher.
+      blocs.push(h("p", { class: "stream-note", text: flux.note }));
+    }
+
+    flux.sens.forEach(function (sens) {
+      blocs.push(h("div", { class: "stream-sens" }, [
+        h("h3", { class: "stream-titre", text: sens.label }),
+        h("p", { class: "stream-meta",
+                 text: sens.segments + " segment(s) · " + fmtBytes(sens.octets) }),
+        sens.sans_contenu
+          ? h("p", { class: "empty",
+                     text: "Aucun contenu dans ce sens : uniquement de la "
+                           + "signalisation (ouverture, acquittements, fermeture)." })
+          : sens.binaire
+            ? h("p", { class: "empty",
+                       text: "Contenu non textuel : " + fmtBytes(sens.octets) +
+                             " d'octets conservés, mais ils ne se lisent pas." })
+            : h("pre", { class: "stream-texte", text: sens.texte })
+      ]));
+    });
+
+    replace(zone, blocs);
   }
 
   /* ------------------------------------------------------------ 5. evenements */

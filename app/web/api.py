@@ -182,6 +182,28 @@ async def packet_detail(request: Request, number: int = Query(..., ge=1)):
     return {"ok": True, "packet": result}
 
 
+@router.get("/stream", summary="Reconstitution d'une communication")
+async def stream(request: Request, key: str = ""):
+    """Suivre une conversation : le contenu echange, sens par sens.
+
+    Wireshark appelle cette fonction « Follow TCP Stream ». Elle est utile pour
+    lire un echange en clair (HTTP, DNS sur TCP, protocole texte) et pour
+    constater qu'un autre echange est chiffre — auquel cas on le dit, plutot que
+    d'afficher des octets illisibles sans explication.
+    """
+    if not key.strip():
+        return JSONResponse({"ok": False, "error": "Aucune communication désignée."},
+                            status_code=400)
+
+    resultat = engine_of(request).follow_stream(key)
+    if resultat is None:
+        return JSONResponse(
+            {"ok": False, "error": "Cette communication n'existe plus : elle a "
+                                   "peut-être été vidée ou remplacée."},
+            status_code=404)
+    return {"ok": True, "stream": resultat}
+
+
 @router.get("/peermap", summary="Qui parle a qui, agrege par interlocuteur")
 async def peermap(request: Request, limit: int = Query(14, ge=1, le=60)):
     """Carte des relations depuis le point de vue de cette machine.
