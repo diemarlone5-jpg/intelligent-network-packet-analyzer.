@@ -917,6 +917,39 @@ body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
                 font-size: 11.5px; line-height: 1.5; white-space: pre-wrap;
                 word-break: break-all; }
 
+/* ---- barre de menus ---- */
+.menubar {
+  flex: 0 0 auto; display: flex; align-items: stretch; gap: 2px;
+  padding: 0 18px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.menu { position: relative; display: flex; }
+.menu-titre {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--text-dim); font-size: 12.5px; font-weight: 600;
+  padding: 7px 11px; border-radius: 0;
+}
+.menu-titre:hover { color: var(--text); background: var(--surface-2); }
+.menu-titre[aria-expanded="true"] { color: var(--text); background: var(--surface-2); }
+.menu-liste {
+  position: absolute; top: 100%; left: 0; z-index: 40;
+  min-width: 250px; padding: 5px;
+  display: none; flex-direction: column; gap: 1px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 12px 30px rgba(0, 0, 0, .38);
+}
+.menu[data-ouvert="oui"] .menu-liste { display: flex; }
+.menu-item {
+  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--text); font-size: 12.5px; text-decoration: none;
+  padding: 7px 10px; border-radius: 4px; width: 100%;
+}
+.menu-item:hover { background: var(--surface-2); }
+.menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.menu-item[disabled] { opacity: .45; cursor: default; }
+.menu-note { font-size: 10.5px; color: var(--text-dim); }
+
 /* ---- les trois volets ---- */
 .volet {
   display: flex;

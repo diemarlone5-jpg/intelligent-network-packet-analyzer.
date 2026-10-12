@@ -1135,6 +1135,14 @@
           champFichier.value = "";
         });
       });
+
+      // Arrivee depuis « Fichier > Ouvrir un .pcap » d'une autre page : le
+      // selecteur s'ouvre directement, sinon l'utilisateur devrait deviner qu'il
+      // doit cliquer sur le bouton qui vient de defiler sous ses yeux.
+      if (window.location.hash === "#ouvrir-pcap") {
+        history.replaceState(null, "", window.location.pathname);
+        champFichier.click();
+      }
     }
 
     // La selection est exposee pour que packetTableRow puisse l'appeler depuis
@@ -1956,6 +1964,74 @@
 
   /* ------------------------------------------------------- 10. parametres */
 
+  /* ----------------------------------------------------- barre de menus */
+
+  /* Les menus s'ouvrent au clic, pas au survol : sur un ecran tactile le survol
+     n'existe pas, et un menu qui s'ouvre au passage de la souris se referme des
+     qu'on descend vers l'element vise. */
+  function initMenubar() {
+    var barre = $("#menubar");
+    if (!barre) return;
+
+    var menus = [].slice.call(barre.querySelectorAll("[data-menu]"));
+
+    function fermer(except) {
+      menus.forEach(function (menu) {
+        if (menu === except) return;
+        menu.removeAttribute("data-ouvert");
+        var titre = menu.querySelector(".menu-titre");
+        if (titre) titre.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    menus.forEach(function (menu) {
+      var titre = menu.querySelector(".menu-titre");
+      if (!titre) return;
+      titre.addEventListener("click", function (evenement) {
+        evenement.stopPropagation();
+        var ouvert = menu.getAttribute("data-ouvert") === "oui";
+        fermer(null);
+        if (!ouvert) {
+          menu.setAttribute("data-ouvert", "oui");
+          titre.setAttribute("aria-expanded", "true");
+        }
+      });
+    });
+
+    // Un clic ailleurs, ou Echap, referme : sans cela le menu resterait ouvert
+    // au-dessus de la page et masquerait ce qu'on vient de demander.
+    document.addEventListener("click", function () { fermer(null); });
+    document.addEventListener("keydown", function (evenement) {
+      if (evenement.key === "Escape") fermer(null);
+    });
+
+    // Les actions sont confiees aux boutons qui existent deja dans la barre du
+    // haut : deux codes differents pour la meme action finiraient par diverger.
+    barre.addEventListener("click", function (evenement) {
+      var cible = evenement.target.closest("[data-menu-action]");
+      if (!cible) return;
+      var action = cible.getAttribute("data-menu-action");
+      fermer(null);
+
+      if (action === "open-pcap") {
+        // Le champ de fichier vit sur la page des paquets : on y va, et la page
+        // ouvre le selecteur a l'arrivee (voir initPackets).
+        if (document.querySelector("#pcap-file")) {
+          document.querySelector("#pcap-file").click();
+        } else {
+          window.location.href = "/packets#ouvrir-pcap";
+        }
+        return;
+      }
+
+      var bouton = { "capture-start": "#capture-start",
+                     "capture-stop": "#capture-stop",
+                     "capture-clear": "#capture-clear" }[action];
+      var vrai = bouton && document.querySelector(bouton);
+      if (vrai && !vrai.disabled) vrai.click();
+    });
+  }
+
   function initSettings() {
     var config = $("#settings-config");
     var problemes = $("#settings-problems");
@@ -2053,6 +2129,7 @@
 
   function boot() {
     initCaptureControls();
+    initMenubar();
     initSummaryAndServices();
     initDashboard();
     initPackets();

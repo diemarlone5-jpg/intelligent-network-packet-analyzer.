@@ -76,6 +76,61 @@
 
   <div class="main">
 
+    <!-- Barre de menus : elle regroupe les actions par INTENTION (que veut-on
+         faire ?), alors que le menu lateral les regroupe par PAGE. Les deux ne
+         se remplacent pas : on ne cherche pas « la page Protocoles » de la meme
+         facon qu'on cherche « voir ce qui occupe la bande passante ». -->
+    <nav class="menubar" id="menubar" aria-label="Menu principal">
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Fichier</button>
+        <div class="menu-liste" role="group">
+          <button class="menu-item" type="button" data-menu-action="open-pcap">Ouvrir un fichier <span class="mono">.pcap</span>…</button>
+          <a class="menu-item" href="/api/export/packets.pcap" download>Exporter en PCAP <span class="menu-note">ouvrable dans Wireshark</span></a>
+          <a class="menu-item" href="/api/export/packets.csv" download>Exporter en CSV <span class="menu-note">paquets et communications</span></a>
+          <a class="menu-item" href="/api/docs" target="_blank" rel="noopener">Documentation de l'API</a>
+        </div>
+      </div>
+
+      {% if is_local_mode %}
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Capture</button>
+        <div class="menu-liste" role="group">
+          <button class="menu-item" type="button" data-menu-action="capture-start">Démarrer la capture</button>
+          <button class="menu-item" type="button" data-menu-action="capture-stop">Arrêter la capture</button>
+          <button class="menu-item" type="button" data-menu-action="capture-clear">Vider les paquets</button>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Analyse</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/packets">Liste des paquets</a>
+          <a class="menu-item" href="/flows">Communications</a>
+          <a class="menu-item" href="/network">Réseau local</a>
+          <a class="menu-item" href="/events">Événements détectés</a>
+        </div>
+      </div>
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Statistiques</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/">Activité et volumes</a>
+          <a class="menu-item" href="/flows">Qui parle à qui</a>
+          <a class="menu-item" href="/protocols">Référentiel des protocoles</a>
+          <a class="menu-item" href="/history">Historique des sessions</a>
+        </div>
+      </div>
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Aide</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/about">Comprendre l'application</a>
+          <a class="menu-item" href="/settings">Paramètres et état des services</a>
+        </div>
+      </div>
+    </nav>
+
     <header class="topbar">
       <div class="topbar-left">
         <h1 class="page-title">{% block heading %}Tableau de bord{% endblock %}</h1>
