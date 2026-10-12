@@ -419,6 +419,26 @@ class AnalyzerEngine:
     # ==================================================================
     # Lecture pour l'interface
     # ==================================================================
+    def pcap_snapshot(self, limit: int = 5000) -> list[tuple[float, bytes, int]]:
+        """Octets bruts des paquets, dans l'ordre, pour l'export PCAP.
+
+        On restitue les octets TELS QU'ILS ONT ETE CAPTURES, jamais une
+        reconstruction a partir des champs analyses : l'export sert justement a
+        confronter l'affichage a une reference externe comme Wireshark. Un
+        fichier rebati a partir de nos propres deductions ne prouverait rien,
+        puisqu'il repeterait nos erreurs.
+        """
+        with self._lock:
+            records = list(self._packets)[-limit:]
+            bruts = dict(self._raw)
+
+        sortie: list[tuple[float, bytes, int]] = []
+        for record in records:
+            octets = bruts.get(record.number)
+            if octets:
+                sortie.append((record.ts, octets, record.size))
+        return sortie
+
     def packet_snapshot(self, limit: int = 200, protocol: str | None = None,
                         search: str | None = None, predicate=None) -> list[dict]:
         """Paquets recents, filtres puis tronques.

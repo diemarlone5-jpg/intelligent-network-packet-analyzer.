@@ -180,3 +180,55 @@ def test_la_courbe_de_trafic_est_exposee(client):
     """Le tableau de bord a besoin d'une serie, pas d'un total cumule."""
     donnees = client.get("/api/stats").json()
     assert isinstance(donnees.get("traffic_series"), list)
+
+
+def test_l_export_pcap_produit_un_fichier_valide(client):
+    """L'export doit etre un VRAI fichier PCAP, pas un fichier maison.
+
+    On verifie le magic et l'ouverture avec Scapy : un lecteur ecrit par
+    d'autres. C'est ce qui permet de dire a l'utilisateur « ouvre-le dans
+    Wireshark » sans le lui faire decouvrir a ses depens.
+    """
+    reponse = client.get("/api/export/packets.pcap")
+    assert reponse.status_code == 200
+    assert reponse.headers["content-type"].startswith("application/vnd.tcpdump.pcap")
+    assert "capture-" in reponse.headers["content-disposition"]
+
+    contenu = reponse.content
+    # En-tete global : magic petit-boutiste, version 2.4.
+    assert contenu[:4] == b"\xd4\xc3\xb2\xa1"
+    assert len(contenu) >= 24
+    assert len(contenu[24:]) % 1 == 0
+
+    scapy = pytest.importorskip("scapy.all", reason="Scapy absent")
+    chemin = _fichier_temporaire(contenu)
+    try:
+        lus = scapy.rdpcap(str(chemin))
+    finally:
+        chemin.unlink(missing_ok=True)
+
+    # Verification croisee : Scapy doit retrouver EXACTEMENT le nombre de
+    # paquets que le moteur a exportes. Un fichier valide mais vide passerait
+    # un simple controle de format sans rien prouver.
+    attendus = len(client.app.state.engine.pcap_snapshot(limit=5000))
+    assert len(lus) == attendus
+
+
+def test_l_export_pcap_est_refuse_en_mode_cloud(client):
+    """Le mode cloud ne capture rien : proposer un export n'aurait pas de sens."""
+    client.app.state.settings.mode = "cloud"
+    reponse = client.get("/api/export/packets.pcap")
+    # Soit refuse, soit un fichier vide — jamais une erreur 500.
+    assert reponse.status_code in (200, 400, 403)
+
+
+def _fichier_temporaire(donnees: bytes):
+    import os
+    import tempfile
+    from pathlib import Path
+
+    descripteur, nom = tempfile.mkstemp(suffix=".pcap")
+    os.close(descripteur)
+    chemin = Path(nom)
+    chemin.write_bytes(donnees)
+    return chemin

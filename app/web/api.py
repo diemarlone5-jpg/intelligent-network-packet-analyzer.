@@ -11,9 +11,12 @@ import asyncio
 import csv
 import io
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
+
+from app.analysis.pcap import Enregistrement, ecrire_pcap
 
 from app.capture.interfaces import capture_available, list_interfaces, pick_default_interface
 
@@ -251,6 +254,28 @@ async def export_packets(request: Request, limit: int = Query(5000, ge=1, le=500
          "destination", "port_destination", "taille_octets", "drapeaux_tcp",
          "ttl", "domaine", "pays", "organisation", "resume"],
         _packet_rows(engine_of(request).packet_snapshot(limit=limit)),
+    )
+
+
+@router.get("/export/packets.pcap",
+            summary="Export PCAP, ouvrable dans Wireshark")
+async def export_pcap(request: Request, limit: int = Query(5000, ge=1, le=50000)):
+    """Restitue la capture au format PCAP.
+
+    C'est la passerelle vers une reference externe : l'utilisateur ouvre le
+    fichier dans Wireshark et compare avec ce que l'application affiche. Sans
+    cet export, il doit croire l'application sur parole.
+    """
+    entrees = [
+        Enregistrement(ts=instant, donnees=octets, taille_origine=taille)
+        for instant, octets, taille in engine_of(request).pcap_snapshot(limit=limit)
+    ]
+    contenu = ecrire_pcap(entrees)
+    nom = "capture-%s.pcap" % datetime.now().strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=contenu,
+        media_type="application/vnd.tcpdump.pcap",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % nom},
     )
 
 
