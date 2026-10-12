@@ -353,3 +353,88 @@ class SqliteRepository(Repository):
 
     def delete_session(self, session_id: int) -> None:
         self._execute("DELETE FROM capture_sessions WHERE id = ?", (session_id,))
+
+    # ------------------------------------------------------ gestion des donnees
+
+    def storage_report(self) -> dict:
+        """Taille de la base et nombre de lignes par table.
+
+        Une capture qui tourne grossit sans fin : sans ce rapport, l'utilisateur
+        ne peut pas savoir que sa base occupe des centaines de megaoctets, ni
+        pourquoi l'application ralentit au demarrage.
+        """
+        with self._lock:
+            with self._connect() as connection:
+                taille_page = connection.execute("PRAGMA page_size").fetchone()[0]
+                nb_pages = connection.execute("PRAGMA page_count").fetchone()[0]
+                libres = connection.execute("PRAGMA freelist_count").fetchone()[0]
+                lignes = {}
+                for table in ("capture_sessions", "flows", "events", "packets",
+                              "ip_intel", "warnings"):
+                    try:
+                        lignes[table] = connection.execute(
+                            "SELECT COUNT(*) FROM %s" % table).fetchone()[0]
+                    except sqlite3.Error:
+                        lignes[table] = 0
+
+        return {
+            "bytes": nb_pages * taille_page,
+            "free_bytes": libres * taille_page,
+            "rows": lignes,
+        }
+
+    def count_orphans(self) -> int:
+        """Lignes rattachees a aucune session.
+
+        Les tables portent « ON DELETE CASCADE » et le mode SQLite est configure
+        pour l'appliquer, donc il ne devrait jamais y en avoir. On le verifie
+        quand meme : une suppression qui laisse des lignes derriere elle ferait
+        grossir la base au lieu de la vider, et personne ne s'en apercevrait.
+        """
+        total = 0
+        for table in ("flows", "events", "packets"):
+            resultat = self._query(
+                "SELECT COUNT(*) AS n FROM %s "
+                "WHERE session_id NOT IN (SELECT id FROM capture_sessions)" % table)
+            total += resultat[0]["n"] if resultat else 0
+        return total
+
+    def purge_old_sessions(self, keep: int) -> dict:
+        """Supprime les sessions les plus anciennes et garde les `keep` recentes.
+
+        On ne supprime jamais « tout ce qui est vieux » d'apres un delai : une
+        session ancienne peut etre celle que l'utilisateur doit montrer. Le
+        nombre est donc explicite, et connu a l'avance.
+        """
+        if keep < 0:
+            keep = 0
+
+        sessions = self._query("SELECT id FROM capture_sessions ORDER BY id DESC")
+        a_supprimer = [ligne["id"] for ligne in sessions[keep:]]
+
+        avant = self.count_orphans()
+        for session_id in a_supprimer:
+            self._execute("DELETE FROM capture_sessions WHERE id = ?", (session_id,))
+        apres = self.count_orphans()
+
+        return {
+            "removed": len(a_supprimer),
+            "kept": min(keep, len(sessions)),
+            "total_before": len(sessions),
+            "orphans_before": avant,
+            "orphans_after": apres,
+        }
+
+    def vacuum(self) -> None:
+        """Recupere l'espace des pages liberees.
+
+        Supprimer des lignes ne reduit PAS le fichier : SQLite marque les pages
+        comme libres et les reutilise. Sans compactage, la base reste aussi
+        grosse alors qu'elle est vide.
+        """
+        with self._lock:
+            connection = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
+            try:
+                connection.execute("VACUUM")
+            finally:
+                connection.close()

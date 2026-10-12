@@ -47,6 +47,44 @@
   <dl class="kv" id="settings-data">
     <div class="kv-row"><dt>—</dt><dd>Chargement…</dd></div>
   </dl>
+
+  <div class="callout callout--warn" id="storage-alerte" hidden>
+    <h3>La base grossit à chaque capture</h3>
+    <p>
+      Une capture qui tourne enregistre les sessions, les communications et les
+      paquets. Rien n'est supprimé automatiquement : au bout de plusieurs
+      heures, la base peut occuper plusieurs centaines de mégaoctets et ralentir
+      le démarrage.
+    </p>
+    <p>
+      <strong>Rien n'est effacé sans que vous le demandiez.</strong> La purge
+      ci-dessous supprime un nombre explicite de sessions, en gardant les plus
+      récentes.
+    </p>
+  </div>
+
+  <div class="actions">
+    <label class="field field--inline">
+      <span>Garder les</span>
+      <input type="number" id="purge-keep" class="input input--tiny" value="10" min="0" max="1000">
+      <span>sessions les plus récentes</span>
+    </label>
+    <button class="btn btn--ghost" type="button" id="btn-purge">
+      Supprimer les sessions plus anciennes
+    </button>
+    <label class="field field--check">
+      <input type="checkbox" id="purge-vacuum" checked>
+      <span>Compacter ensuite <span class="panel-hint">(récupère l'espace disque)</span></span>
+    </label>
+  </div>
+  <p class="panel-hint" id="purge-resultat"></p>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Exports</h2>
+    <span class="panel-hint">emporter les données hors de l'application</span>
+  </header>
   <div class="actions">
     <a class="btn btn--ghost btn--small" href="/api/export/packets.pcap" download>
       Exporter la capture en PCAP (ouvrable dans Wireshark)
@@ -57,7 +95,7 @@
     <a class="btn btn--ghost btn--small" href="/api/export/flows.csv" download>
       Exporter les communications en CSV
     </a>
-    <a class="btn btn--ghost btn--small" href="/api/docs" target="_blank" rel="noopener">
+    <a class="btn btn--ghost btn--small" href="/api/docs">
       Documentation de l'API
     </a>
   </div>

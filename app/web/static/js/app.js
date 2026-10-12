@@ -2123,6 +2123,80 @@
         h("dt", { text: "Indisponible" }), h("dd", { text: "Démarrez une capture." })
       ]));
     });
+
+    /* Ce qui est ecrit sur le disque.
+
+       Une capture qui tourne grossit sans fin : sans ce rapport, l'utilisateur
+       ne peut pas savoir que sa base occupe des centaines de megaoctets, ni
+       pourquoi l'application ralentit au demarrage. */
+    function chargerStockage() {
+      api("/api/data/storage").then(function (data) {
+        var lignes = data.rows || {};
+        replace(donnees, [
+          ligne("Taille de la base",
+            fmtBytes(data.bytes) + (data.free_bytes
+              ? " — dont " + fmtBytes(data.free_bytes) + " récupérables par compactage"
+              : "")),
+          ligne("Sessions enregistrées", String(lignes.capture_sessions || 0)),
+          ligne("Communications enregistrées", String(lignes.flows || 0)),
+          ligne("Paquets enregistrés", String(lignes.packets || 0)),
+          ligne("Événements enregistrés", String(lignes.events || 0)),
+          ligne("Adresses enrichies", String(lignes.ip_intel || 0)),
+          ligne("Lignes sans session", data.orphans === 0
+            ? "aucune" : String(data.orphans) + " — anormal, à signaler")
+        ]);
+
+        // L'avertissement n'apparait que s'il a une raison d'etre : l'afficher
+        // en permanence banaliserait l'alerte.
+        var alerte = $("#storage-alerte");
+        if (alerte) alerte.hidden = data.bytes < 50 * 1024 * 1024;
+      }).catch(function (erreur) {
+        replace(donnees, h("div", { class: "kv-row" }, [
+          h("dt", { text: "Indisponible" }), h("dd", { text: erreur.message })
+        ]));
+      });
+    }
+    chargerStockage();
+
+    var boutonPurge = $("#btn-purge");
+    if (boutonPurge) {
+      boutonPurge.addEventListener("click", function () {
+        var champGarder = $("#purge-keep");
+        var garder = parseInt((champGarder && champGarder.value) || "10", 10);
+        if (!(garder >= 0)) garder = 10;
+        var compacter = !!($("#purge-vacuum") || {}).checked;
+        var resultat = $("#purge-resultat");
+
+        // Suppression definitive : on demande confirmation, en annoncant le
+        // nombre de sessions concernees.
+        if (!window.confirm(
+              "Supprimer toutes les sessions sauf les " + garder +
+              " plus récentes ?\n\nCette action est définitive.")) {
+          return;
+        }
+
+        boutonPurge.disabled = true;
+        boutonPurge.textContent = "Suppression en cours…";
+        api("/api/data/purge?keep=" + garder + (compacter ? "&vacuum=true" : ""),
+            { method: "POST" })
+          .then(function (data) {
+            if (resultat) {
+              resultat.textContent = data.removed === 0
+                ? "Aucune session à supprimer : " + data.kept + " session(s) conservée(s)."
+                : data.removed + " session(s) supprimée(s), " + data.kept +
+                  " conservée(s)." + (data.vacuumed ? " Base compactée." : "");
+            }
+            chargerStockage();
+          })
+          .catch(function (erreur) {
+            if (resultat) resultat.textContent = "Suppression refusée — " + erreur.message;
+          })
+          .finally(function () {
+            boutonPurge.disabled = false;
+            boutonPurge.textContent = "Supprimer les sessions plus anciennes";
+          });
+      });
+    }
   }
 
   /* ------------------------------------------------------------------ demarrage */

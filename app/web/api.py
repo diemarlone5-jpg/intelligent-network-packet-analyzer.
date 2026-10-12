@@ -289,6 +289,49 @@ async def ouvrir_pcap(request: Request):
     }
 
 
+@router.get("/data/storage", summary="Taille de la base et lignes conservees")
+async def data_storage(request: Request):
+    """Ce qui est ecrit sur le disque, et depuis combien de sessions.
+
+    Une capture qui tourne grossit sans fin : cette route permet de le constater
+    avant que la base ne devienne genante.
+    """
+    depot = request.app.state.repository
+    rapport = depot.storage_report()
+    return {
+        "ok": True,
+        "bytes": rapport["bytes"],
+        "free_bytes": rapport["free_bytes"],
+        "rows": rapport["rows"],
+        "orphans": depot.count_orphans(),
+    }
+
+
+@router.post("/data/purge", summary="Supprimer les sessions anciennes")
+async def data_purge(request: Request, keep: int = Query(10, ge=0, le=1000),
+                     vacuum: bool = Query(False)):
+    """Garde les `keep` sessions les plus recentes, supprime les autres.
+
+    L'operation est explicite et bornee : on supprime un NOMBRE de sessions, pas
+    « tout ce qui est ancien » d'apres un delai. Une session ancienne peut etre
+    celle que l'utilisateur doit montrer.
+    """
+    garde = _guard_local(request)
+    if garde is not None:
+        return garde
+
+    depot = request.app.state.repository
+    resultat = depot.purge_old_sessions(keep)
+
+    # Supprimer des lignes ne reduit pas le fichier : SQLite reutilise les pages
+    # liberees. Sans compactage, l'utilisateur supprimerait ses donnees sans voir
+    # la taille diminuer, et croirait que rien ne s'est passe.
+    if vacuum and resultat["removed"]:
+        depot.vacuum()
+
+    return {"ok": True, "vacuumed": bool(vacuum and resultat["removed"]), **resultat}
+
+
 @router.get("/settings", summary="Configuration en vigueur")
 async def settings_view(request: Request):
     """Configuration actuelle, SANS AUCUN SECRET.

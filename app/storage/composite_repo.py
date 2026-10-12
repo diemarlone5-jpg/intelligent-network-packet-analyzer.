@@ -132,3 +132,21 @@ class CompositeRepository(Repository):
     def save_intel(self, intel: IPIntel) -> None:
         self.local.save_intel(intel)
         self._try_remote(self.remote.save_intel, intel)
+
+    # ------------------------------------------------- gestion des donnees
+    #
+    # Ces operations ne concernent QUE la base locale. Le depot distant est une
+    # archive : on n'y supprime rien depuis l'application, car une suppression
+    # a distance est irreversible et ne se voit pas depuis l'interface.
+
+    def storage_report(self) -> dict:
+        return self.local.storage_report()
+
+    def count_orphans(self) -> int:
+        return self.local.count_orphans()
+
+    def purge_old_sessions(self, keep: int) -> dict:
+        return self.local.purge_old_sessions(keep)
+
+    def vacuum(self) -> None:
+        self.local.vacuum()
