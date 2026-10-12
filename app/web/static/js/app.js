@@ -1079,6 +1079,54 @@
       });
     }
 
+    /* Ouverture d'un fichier .pcap enregistre.
+
+       Le fichier part en corps brut, pas dans un formulaire multipart : cela
+       evite une dependance supplementaire pour une seule fonctionnalite. */
+    var boutonOuvrir = $("#pcap-open");
+    var champFichier = $("#pcap-file");
+    if (boutonOuvrir && champFichier) {
+      boutonOuvrir.addEventListener("click", function () { champFichier.click(); });
+
+      champFichier.addEventListener("change", function () {
+        var fichier = champFichier.files && champFichier.files[0];
+        if (!fichier) return;
+
+        afficherMessage("Lecture de « " + fichier.name + " » (" +
+                        fmtBytes(fichier.size) + ")…", "ok");
+        boutonOuvrir.disabled = true;
+
+        fetch("/api/pcap/open", {
+          method: "POST",
+          headers: { "X-CSRF-Token": CSRF, "Content-Type": "application/octet-stream" },
+          body: fichier
+        }).then(function (reponse) {
+          return reponse.json().catch(function () {
+            return { ok: false, error: "Réponse illisible du serveur." };
+          });
+        }).then(function (data) {
+          if (!data.ok) throw new Error(data.error || "Import impossible.");
+          afficherMessage(
+            data.loaded + " paquet(s) analysé(s) depuis « " + fichier.name +
+            " » (lien " + data.link_type_label + ")" +
+            (data.unreadable ? " — " + data.unreadable + " illisible(s), ignoré(s)" : ""),
+            "ok");
+          // Le fichier remplace la capture : la selection precedente ne designe
+          // plus rien, et les volets du bas doivent repasser au repos.
+          selection = null;
+          if (refVolet) refVolet.textContent = "aucun paquet sélectionné — cliquez sur une ligne";
+          replierVolets(true);
+          load();
+        }).catch(function (erreur) {
+          afficherMessage("Import refusé — " + erreur.message);
+        }).then(function () {
+          boutonOuvrir.disabled = false;
+          // Remettre a vide permet de rouvrir immediatement le meme fichier.
+          champFichier.value = "";
+        });
+      });
+    }
+
     // La selection est exposee pour que packetTableRow puisse l'appeler depuis
     // n'importe quelle page.
     window.__pkaSelectPacket = selectionner;

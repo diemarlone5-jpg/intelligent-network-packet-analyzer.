@@ -28,6 +28,7 @@ from app.analysis.explain import Explainer
 from app.analysis.flows import FlowTable
 from app.analysis.parser import PacketParser
 from app.analysis.protocols import classify_address
+from app.analysis.pcap import LINKTYPE_ETHERNET, LINKTYPE_IP
 from app.analysis.statistics import hierarchie, repartition_depuis_comptes, tranche_de
 from app.capture.agent import CaptureAgent
 from app.capture.interfaces import local_ips
@@ -241,6 +242,55 @@ class AnalyzerEngine:
     # ==================================================================
     # Traitement d'un paquet
     # ==================================================================
+    def ingest_raw(self, donnees: bytes, type_lien: int, ts: float) -> bool:
+        """Analyse une trame issue d'un fichier PCAP, comme si elle arrivait.
+
+        On repasse par le MEME chemin que la capture en direct (`_handle_packet`).
+        Un fichier relu doit produire exactement les memes enregistrements qu'une
+        capture en temps reel : sinon l'outil afficherait deux verites differentes
+        selon la source, et la comparaison avec Wireshark n'aurait plus de sens.
+
+        Rend False si la trame est illisible, sans lever : un fichier abime ne
+        doit pas interrompre l'import des trames suivantes.
+        """
+        paquet = self._paquet_depuis_octets(donnees, type_lien, ts)
+        if paquet is None:
+            return False
+        try:
+            self._handle_packet(paquet)
+        except Exception:
+            return False
+        return True
+
+    @staticmethod
+    def _paquet_depuis_octets(donnees: bytes, type_lien: int, ts: float):
+        """Reconstruit un paquet Scapy a partir des octets d'un fichier.
+
+        Le type de lien vient de l'en-tete du fichier, pas d'une supposition :
+        une trame Ethernet et un paquet IP brut ne commencent pas au meme
+        endroit, et se tromper decalerait toutes les lecture de 14 octets.
+        """
+        from scapy.all import Ether, IP
+
+        try:
+            if type_lien == LINKTYPE_ETHERNET:
+                paquet = Ether(donnees)
+            elif type_lien == LINKTYPE_IP:
+                paquet = IP(donnees)
+            else:
+                # Type de lien non gere : mieux vaut le dire que de deviner.
+                return None
+        except Exception:
+            return None
+
+        # L'instant d'origine, sinon les paquets s'afficheraient avec l'heure
+        # de l'import et la chronologie du fichier serait perdue.
+        try:
+            paquet.time = ts
+        except Exception:
+            pass
+        return paquet
+
     def _handle_packet(self, packet) -> None:
         """Appele par le fil de capture pour chaque paquet. Ne doit pas lever."""
         with self._lock:

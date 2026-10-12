@@ -16,7 +16,11 @@ from datetime import datetime
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 
-from app.analysis.pcap import Enregistrement, ecrire_pcap
+from app.analysis.pcap import Enregistrement, PcapErreur, ecrire_pcap, lire_pcap
+
+# Taille maximale acceptee pour un fichier PCAP importe. Une limite existe pour
+# que l'envoi d'un fichier enorme ne puisse pas saturer la memoire du serveur.
+TAILLE_MAX_PCAP = 64 * 1024 * 1024        # 64 Mo
 
 from app.capture.interfaces import capture_available, list_interfaces, pick_default_interface
 
@@ -187,6 +191,80 @@ async def peermap(request: Request, limit: int = Query(14, ge=1, le=60)):
     legende plutot que de laisser croire qu'elle montre tout.
     """
     return {"ok": True, **engine_of(request).peer_map(limit=limit)}
+
+
+@router.post("/pcap/open", summary="Ouvrir un fichier PCAP enregistré")
+async def ouvrir_pcap(request: Request):
+    """Importe une capture enregistrée et l'analyse comme une capture en direct.
+
+    Le fichier arrive dans le corps brut de la requete, pas dans un formulaire
+    multipart : cela evite d'ajouter une dependance pour une seule
+    fonctionnalite. Le navigateur envoie l'objet File tel quel.
+
+    Refuse en mode consultation : une instance hebergee est en lecture seule, et
+    laisser un visiteur remplacer l'etat du moteur serait a la fois une atteinte
+    a l'integrite des donnees et un moyen de saturer le service.
+    """
+    garde = _guard_local(request)
+    if garde is not None:
+        return garde
+
+    annonce = request.headers.get("content-length")
+    if annonce and annonce.isdigit() and int(annonce) > TAILLE_MAX_PCAP:
+        return JSONResponse(
+            {"ok": False, "error": "Fichier trop volumineux : 64 Mo au maximum."},
+            status_code=413)
+
+    corps = await request.body()
+    if not corps:
+        return JSONResponse({"ok": False, "error": "Aucun fichier reçu."},
+                            status_code=400)
+    if len(corps) > TAILLE_MAX_PCAP:
+        return JSONResponse(
+            {"ok": False, "error": "Fichier trop volumineux : 64 Mo au maximum."},
+            status_code=413)
+
+    try:
+        type_lien, enregistrements = lire_pcap(corps)
+    except PcapErreur as erreur:
+        # Un message precis vaut mieux qu'un « erreur 500 » : l'utilisateur doit
+        # savoir si le fichier est d'un autre format, tronque, ou vide.
+        return JSONResponse({"ok": False, "error": str(erreur)}, status_code=400)
+
+    if not enregistrements:
+        return JSONResponse(
+            {"ok": False,
+             "error": "Ce fichier ne contient aucun paquet. Il est peut-être "
+                      "tronqué, ou la capture a été arrêtée trop tôt."},
+            status_code=400)
+
+    engine = engine_of(request)
+
+    # Ouvrir un fichier REMPLACE la capture en cours. Melanger deux sources
+    # donnerait une liste ou l'on ne saurait plus ce qui vient d'ou se trouve,
+    # et toute lecture serait trompeuse.
+    if engine.agent.running:
+        engine.stop()
+    engine.reset()
+
+    retenus = 0
+    illisibles = 0
+    for enregistrement in enregistrements:
+        if engine.ingest_raw(enregistrement.donnees, type_lien, enregistrement.ts):
+            retenus += 1
+        else:
+            illisibles += 1
+
+    return {
+        "ok": True,
+        "link_type": type_lien,
+        "link_type_label": ("Ethernet" if type_lien == 1
+                            else "IP brut" if type_lien == 101
+                            else "type %d" % type_lien),
+        "read": len(enregistrements),
+        "loaded": retenus,
+        "unreadable": illisibles,
+    }
 
 
 @router.get("/settings", summary="Configuration en vigueur")

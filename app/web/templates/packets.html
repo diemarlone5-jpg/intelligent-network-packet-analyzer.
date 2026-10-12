@@ -27,6 +27,10 @@
 
     <p class="toolbar-note" id="packet-count">—</p>
 
+    <input type="file" id="pcap-file" accept=".pcap,.cap,application/vnd.tcpdump.pcap"
+           class="sr-only">
+    <button class="btn btn--ghost btn--small" type="button" id="pcap-open"
+            title="Analyser une capture enregistrée, comme une capture en direct">Ouvrir un .pcap</button>
     <a class="btn btn--ghost btn--small" href="/api/export/packets.pcap" download
        title="Fichier ouvrable dans Wireshark, pour comparer avec ce que l'application affiche">PCAP</a>
     <a class="btn btn--ghost btn--small" href="/api/export/packets.csv" download
