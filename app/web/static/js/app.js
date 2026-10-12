@@ -58,6 +58,118 @@
     return h("tr", null, h("td", { colspan: String(colspan), class: "empty", text: message }));
   }
 
+  /* Une ligne d'etat de service. Definie au niveau du fichier, et non dans la
+     fonction qui l'a introduite : le tableau de bord ET la page Parametres
+     affichent tous les deux cette liste. */
+  function serviceRow(label, state, detail) {
+    return h("div", { class: "service-item", "data-state": state }, [
+      h("span", { class: "service-dot", "aria-hidden": "true" }),
+      h("span", { class: "service-label", text: label }),
+      h("span", { class: "service-detail", text: detail })
+    ]);
+  }
+
+  function etat(flag) {
+    if (flag === true) return "ok";
+    if (flag === false) return "ko";
+    return "off";
+  }
+
+  /* ------------------------------------------------------------------ SVG */
+
+  /* Le SVG n'utilise pas les memes fonctions que le HTML : ses elements
+     doivent etre crees dans l'espace de noms SVG, sinon le navigateur les
+     traite comme des balises inconnues et rien ne s'affiche. */
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  function s(tag, attrs, children) {
+    var node = document.createElementNS(SVG_NS, tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (key) {
+        var valeur = attrs[key];
+        if (valeur === null || valeur === undefined) return;
+        node.setAttribute(key, String(valeur));
+      });
+    }
+    if (children) {
+      (Array.isArray(children) ? children : [children]).forEach(function (enfant) {
+        if (enfant === null || enfant === undefined) return;
+        // Un texte doit devenir un noeud texte : appendChild refuse une chaine
+        // de caracteres, et l'erreur serait invisible si elle est avalee plus
+        // haut par un catch.
+        if (typeof enfant === "string" || typeof enfant === "number") {
+          node.appendChild(document.createTextNode(String(enfant)));
+        } else {
+          node.appendChild(enfant);
+        }
+      });
+    }
+    return node;
+  }
+
+  /* Courbe d'activite : un point par seconde, sur les deux dernieres minutes.
+     Dessinee a la main plutot qu'avec une bibliotheque : la politique de
+     securite du serveur n'autorise que nos propres ressources, et un graphique
+     n'a pas besoin de plus de vingt lignes de code. */
+  function dessinerCourbe(zone, points) {
+    if (!zone) return;
+    if (!points || points.length < 2) {
+      replace(zone, h("p", { class: "empty", text: points && points.length === 1
+        ? "Première mesure en cours…"
+        : "Démarrez une capture pour voir l'activité." }));
+      return;
+    }
+
+    var L = 900, H = 160, marge = 28;
+    var maxi = Math.max.apply(null, points.map(function (p) { return p.packets; })) || 1;
+    var pas = (L - marge * 1.6) / (points.length - 1);
+    var base = H - marge;
+
+    var coords = points.map(function (p, i) {
+      return {
+        x: marge * 0.6 + i * pas,
+        y: base - (p.packets / maxi) * (base - marge * 0.5)
+      };
+    });
+
+    var trace = coords.map(function (c, i) {
+      return (i ? "L" : "M") + Math.round(c.x) + " " + Math.round(c.y);
+    }).join(" ");
+    var dernier = coords[coords.length - 1];
+
+    var enfants = [
+      s("path", { class: "courbe-aire", d: trace
+          + " L" + Math.round(dernier.x) + " " + base
+          + " L" + Math.round(coords[0].x) + " " + base + " Z" }),
+      s("path", { class: "courbe-ligne", d: trace }),
+      s("line", { class: "courbe-repere", x1: 0, y1: base, x2: L, y2: base }),
+      s("text", { class: "courbe-legende", x: 4, y: marge * 0.7 },
+        "maximum " + maxi + " paquets/s"),
+      s("text", { class: "courbe-legende", x: L - 150, y: base + 18 },
+        "maintenant : " + points[points.length - 1].packets + " paquets/s"),
+      // Duree reelle de la fenetre, deduite des horodatages : l'annoncer en dur
+      // serait faux des que l'intervalle de mesure change.
+      s("text", { class: "courbe-legende", x: 4, y: base + 18 },
+        "il y a " + dureeFenetre(points))
+    ];
+
+    replace(zone, s("svg", { viewBox: "0 0 " + L + " " + H,
+                             preserveAspectRatio: "none",
+                             role: "img",
+                             "aria-label": "Activité réseau : jusqu'à " + maxi
+                                           + " paquets par seconde sur "
+                                           + dureeFenetre(points) },
+                    enfants));
+  }
+
+  /* Duree couverte par la courbe, deduite des horodatages des points. */
+  function dureeFenetre(points) {
+    if (!points || points.length < 2) return "—";
+    var secondes = points[points.length - 1].ts - points[0].ts;
+    if (secondes < 90) return Math.round(secondes) + " s";
+    return Math.round(secondes / 60) + " min";
+  }
+
   function fmtBytes(n) {
     var value = Number(n) || 0;
     if (value < 1024) return value + " o";
@@ -441,20 +553,6 @@
 
     var servicesBox = $("#services-state");
     if (servicesBox) {
-      var serviceRow = function (label, state, detail) {
-        return h("div", { class: "service-item", "data-state": state }, [
-          h("span", { class: "service-dot", "aria-hidden": "true" }),
-          h("span", { class: "service-label", text: label }),
-          h("span", { class: "service-detail", text: detail })
-        ]);
-      };
-
-      var etat = function (flag) {
-        if (flag === true) return "ok";
-        if (flag === false) return "ko";
-        return "off";
-      };
-
       api("/api/dependencies").then(function (data) {
         replace(servicesBox, [
           serviceRow("Base locale", etat(data.base_locale.disponible),
@@ -503,6 +601,7 @@
 
     var protoChart = $("#protocol-chart");
     var portChart = $("#port-chart");
+    var trafficChart = $("#traffic-chart");
     var sources = $("#top-sources");
     var destinations = $("#top-destinations");
     var eventsBox = $("#recent-events");
@@ -587,6 +686,9 @@
       }
 
       var protoItems = stats.protocols || [];
+      // Courbe d'activite : le serveur fournit un debit par seconde, la page
+      // ne fait que le dessiner.
+      dessinerCourbe(trafficChart, stats.traffic_series || []);
       replace(protoChart, protoItems.length
         ? barRows(protoItems, "name", "count", "")
         : h("p", { class: "empty", text: "Aucune donnée : démarrez une capture pour observer le trafic." }));
@@ -642,7 +744,16 @@
 
       socket.addEventListener("message", function (message) {
         attempts = 0;
-        try { render(JSON.parse(message.data)); } catch (error) { /* ignore */ }
+        try {
+          render(JSON.parse(message.data));
+        } catch (error) {
+          // Un catch totalement muet masquerait une vraie panne d'affichage :
+          // on signale la premiere erreur, une seule fois.
+          if (!window.__pkaErreurFlux) {
+            window.__pkaErreurFlux = String(error && error.message || error);
+            if (window.console) console.error("Flux temps réel :", error);
+          }
+        }
       });
 
       socket.addEventListener("close", function () {
@@ -672,8 +783,19 @@
     var voletDetails = $("#packet-details");
     var voletOctets = $("#packet-bytes");
     var refVolet = $("#volet-ref");
+    var hote = $(".wireshark");
     var selection = null;     // numero du paquet actuellement selectionne
     var derniers = [];        // paquets affiches, conserves pour la selection
+
+    /* Les deux volets du bas ne servent a rien tant qu'aucun paquet n'est
+       choisi : on les replie pour rendre la place a la liste, qui n'affichait
+       que sept lignes a l'ouverture. */
+    function replierVolets(replies) {
+      if (!hote) return;
+      if (replies) hote.classList.add("sans-selection");
+      else hote.classList.remove("sans-selection");
+    }
+    replierVolets(true);
 
     function afficherMessage(texte, genre) {
       if (!zoneMessage) return;
@@ -758,6 +880,7 @@
        meme page, comme dans Wireshark. */
     function selectionner(numero) {
       marquer(numero);
+      replierVolets(false);
       if (refVolet) refVolet.textContent = "paquet n° " + numero + " — chargement…";
 
       api("/api/packet?number=" + numero).then(function (data) {
@@ -1385,14 +1508,25 @@
 
   function initTheme() {
     var toggle = $("#theme-toggle");
-    if (!toggle) return;
-    toggle.addEventListener("click", function () {
-      var current = document.documentElement.getAttribute("data-theme") || "dark";
-      var next = current === "dark" ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      document.cookie = "pka_theme=" + next + ";path=/;max-age=31536000;samesite=lax";
-      toggle.setAttribute("aria-pressed", next === "light" ? "true" : "false");
-    });
+    var sombre = $("#btn-theme-sombre");
+    var clair = $("#btn-theme-clair");
+
+    function appliquer(nom) {
+      document.documentElement.setAttribute("data-theme", nom);
+      document.cookie = "pka_theme=" + nom + ";path=/;max-age=31536000;samesite=lax";
+      if (toggle) toggle.setAttribute("aria-pressed", nom === "light" ? "true" : "false");
+    }
+
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        var actuel = document.documentElement.getAttribute("data-theme") || "dark";
+        appliquer(actuel === "dark" ? "light" : "dark");
+      });
+    }
+    // La page Parametres propose les deux choix explicitement, plutot qu'une
+    // bascule : on ne devine pas dans quel theme on se trouve.
+    if (sombre) sombre.addEventListener("click", function () { appliquer("dark"); });
+    if (clair) clair.addEventListener("click", function () { appliquer("light"); });
   }
 
   /* ----------------------------------------------------- 9. detail d'un paquet */
@@ -1571,6 +1705,101 @@
     window.__pkaRefresh = charger;
   }
 
+  /* ------------------------------------------------------- 10. parametres */
+
+  function initSettings() {
+    var config = $("#settings-config");
+    var problemes = $("#settings-problems");
+    var services = $("#settings-services");
+    var donnees = $("#settings-data");
+    if (!config) return;
+
+    function ligne(terme, valeur) {
+      return h("div", { class: "kv-row" }, [
+        h("dt", { text: terme }),
+        h("dd", { text: valeur })
+      ]);
+    }
+
+    api("/api/settings").then(function (data) {
+      var s = data.settings || {};
+      replace(config, [
+        ligne("Environnement", s.environnement || "—"),
+        ligne("Mode", s.mode === "cloud"
+          ? "cloud (lecture seule de l'historique)"
+          : "local (capture en direct)"),
+        ligne("Capture réseau", s.capture_locale
+          ? "disponible" : "indisponible dans ce mode"),
+        ligne("Interface par défaut", s.interface_par_defaut || "détection automatique"),
+        ligne("Paquets gardés en mémoire", String(s.memoire_paquets || "—")),
+        ligne("Base de données locale", s.base_locale || "—"),
+        ligne("Enrichissement des adresses",
+          (s.enrichissement.actif ? "activé" : "désactivé") +
+          (s.enrichissement.actif ? " — " + s.enrichissement.adresses_connues +
+            " adresse(s) connue(s), " + s.enrichissement.en_attente + " en attente" : "") +
+          ", cache de " + s.enrichissement.cache_heures + " h"),
+        ligne("Supabase",
+          (s.supabase.actif ? "activé" : "désactivé") +
+          " — adresse " + (s.supabase.adresse_fournie ? "fournie" : "absente") +
+          ", clé " + (s.supabase.cle_fournie ? "fournie" : "absente")),
+        ligne("Assistant IA",
+          (s.assistant_ia.actif ? "activé" : "désactivé") +
+          " (" + s.assistant_ia.fournisseur + " / " + s.assistant_ia.modele + ")" +
+          ", clé " + (s.assistant_ia.cle_fournie ? "fournie" : "absente")),
+        ligne("AbuseIPDB", s.abuseipdb.cle_fournie ? "clé fournie" : "clé absente"),
+        ligne("Clé de signature des sessions",
+          s.secret_signe.fourni ? "fournie (32 caractères ou plus)" : "absente ou trop courte")
+      ]);
+
+      var liste = data.problems || [];
+      replace(problemes, liste.length
+        ? h("ul", { class: "problemes-liste" }, liste.map(function (texte) {
+            return h("li", { text: texte });
+          }))
+        : h("p", { class: "vide-ok", text: "Aucun problème détecté dans la configuration." }));
+    }).catch(function (erreur) {
+      replace(config, h("div", { class: "kv-row" }, [
+        h("dt", { text: "Erreur" }), h("dd", { text: erreur.message })
+      ]));
+    });
+
+    api("/api/dependencies").then(function (data) {
+      replace(services, [
+        serviceRow("Base locale", etat(data.base_locale.disponible), data.base_locale.chemin),
+        serviceRow("Supabase",
+          data.supabase.active === false ? "off" : etat(data.supabase.disponible),
+          data.supabase.active === false
+            ? "désactivé (SUPABASE_ENABLED=false)"
+            : (data.supabase.erreur || "connecté")),
+        serviceRow("Capture réseau", etat(data.capture.disponible),
+          data.capture.disponible
+            ? data.capture.interfaces + " interface(s) disponible(s)"
+            : data.capture.message),
+        serviceRow("Enrichissement",
+          data.enrichissement.active ? "ok" : "off",
+          data.enrichissement.active
+            ? data.enrichissement.appels_externes + " appel(s) externe(s)"
+            : "désactivé")
+      ]);
+    }).catch(function (erreur) {
+      replace(services, h("p", { class: "empty", text: "Indisponible : " + erreur.message }));
+    });
+
+    api("/api/stats").then(function (data) {
+      replace(donnees, [
+        ligne("Paquets capturés depuis le démarrage", String(data.packets || 0)),
+        ligne("Communications observées", String(data.flows || 0)),
+        ligne("Appareils vus sur le réseau local", String(data.devices ? data.devices.length : 0)),
+        ligne("Volume total", fmtBytes(data.bytes || 0)),
+        ligne("Sessions enregistrées", String(data.sessions || 0))
+      ]);
+    }).catch(function () {
+      replace(donnees, h("div", { class: "kv-row" }, [
+        h("dt", { text: "Indisponible" }), h("dd", { text: "Démarrez une capture." })
+      ]));
+    });
+  }
+
   /* ------------------------------------------------------------------ demarrage */
 
   function boot() {
@@ -1585,6 +1814,7 @@
     initProtocols();
     initPacketDetail();
     initNetwork();
+    initSettings();
     initTheme();
   }
 

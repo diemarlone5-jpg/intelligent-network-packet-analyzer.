@@ -140,3 +140,43 @@ def test_la_syntaxe_du_filtre_est_exposee(client):
     assert "tcp" in syntaxe["protocoles"]
     assert "ip.addr" in syntaxe["champs"]
     assert syntaxe["exemples"]
+
+
+def test_la_page_des_parametres_repond(client):
+    reponse = client.get("/settings")
+    assert reponse.status_code == 200
+    assert "Paramètres" in reponse.text
+
+
+def test_les_parametres_n_exposent_aucun_secret(client):
+    """Une page de reglages ne doit jamais devenir un moyen de lire les cles.
+
+    On place des valeurs reconnaissables dans la configuration, puis on verifie
+    qu'AUCUNE n'apparait dans la reponse : seuls des indicateurs « fourni /
+    absent » sont admis.
+    """
+    reglages = client.app.state.settings
+    reglages.secret_key = "SECRET-DE-SIGNATURE-A-NE-JAMAIS-EXPOSER"
+    reglages.supabase_service_key = "CLE-SUPABASE-A-NE-JAMAIS-EXPOSER"
+    reglages.ai_api_key = "CLE-IA-A-NE-JAMAIS-EXPOSER"
+    reglages.abuseipdb_api_key = "CLE-ABUSEIPDB-A-NE-JAMAIS-EXPOSER"
+
+    corps = client.get("/api/settings").text
+    for secret in ("SECRET-DE-SIGNATURE-A-NE-JAMAIS-EXPOSER",
+                   "CLE-SUPABASE-A-NE-JAMAIS-EXPOSER",
+                   "CLE-IA-A-NE-JAMAIS-EXPOSER",
+                   "CLE-ABUSEIPDB-A-NE-JAMAIS-EXPOSER"):
+        assert secret not in corps, "secret exposé par /api/settings"
+
+    # L'utilisateur doit tout de meme savoir ce qui est configure.
+    donnees = client.get("/api/settings").json()["settings"]
+    assert donnees["secret_signe"]["fourni"] is True
+    assert donnees["supabase"]["cle_fournie"] is True
+    assert donnees["assistant_ia"]["cle_fournie"] is True
+    assert donnees["abuseipdb"]["cle_fournie"] is True
+
+
+def test_la_courbe_de_trafic_est_exposee(client):
+    """Le tableau de bord a besoin d'une serie, pas d'un total cumule."""
+    donnees = client.get("/api/stats").json()
+    assert isinstance(donnees.get("traffic_series"), list)

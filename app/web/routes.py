@@ -182,6 +182,19 @@ async def protocols(request: Request):
     return templates.TemplateResponse(request, "protocols.html", context)
 
 
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """Configuration en vigueur, etat des services, donnees conservees.
+
+    La page est en lecture seule : les reglages se modifient dans .env. Une
+    interface web qui piloterait la configuration du moteur serait une prise
+    supplementaire pour un attaquant, et le reglage disparaitrait du projet.
+    """
+    context = base_context(request)
+    context["active"] = "settings"
+    return templates.TemplateResponse(request, "settings.html", context)
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about(request: Request):
     """Page de comprehension : elle explique le fonctionnement du systeme.

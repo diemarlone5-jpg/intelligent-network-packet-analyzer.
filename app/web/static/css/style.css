@@ -868,6 +868,21 @@ body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
 .aide-liste { margin: 4px 0 9px; padding-left: 18px; }
 .aide-liste li { margin-bottom: 3px; font-size: 12px; }
 
+/* ---- courbe d'activite du tableau de bord ---- */
+.chart--traffic svg { width: 100%; height: 160px; display: block; }
+.courbe-aire { fill: var(--accent-soft); }
+.courbe-ligne { fill: none; stroke: var(--accent); stroke-width: 1.8;
+                vector-effect: non-scaling-stroke; }
+.courbe-repere { stroke: var(--border); stroke-width: 1;
+                 vector-effect: non-scaling-stroke; }
+.courbe-legende { fill: var(--text-dim); font-size: 11px; font-family: var(--mono); }
+
+/* ---- page Parametres ---- */
+.problemes-liste { margin: 0; padding-left: 20px; }
+.problemes-liste li { margin-bottom: 5px; font-size: 12.5px; line-height: 1.5;
+                      color: var(--warn-text, #e8b45a); }
+.vide-ok { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+
 /* ---- les trois volets ---- */
 .volet {
   display: flex;
@@ -881,6 +896,15 @@ body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
 .volet--liste { flex: 1 1 auto; }
 .volet--details { flex: 0 0 26%; }
 .volet--octets { flex: 0 0 21%; }
+
+/* Tant qu'aucun paquet n'est selectionne, les deux volets du bas se reduisent a
+   leur en-tete : ils ne contiennent rien, et leur place est prise sur la liste.
+   C'est ce qui laissait voir sept lignes a l'ouverture. Des qu'un paquet est
+   choisi, ils reprennent leur hauteur. */
+.wireshark.sans-selection .volet--details,
+.wireshark.sans-selection .volet--octets { flex: 0 0 auto; }
+.wireshark.sans-selection .volet-corps,
+.wireshark.sans-selection .hexdump { display: none; }
 
 .volet-entete {
   flex: 0 0 auto;

@@ -175,6 +175,49 @@ async def packet_detail(request: Request, number: int = Query(..., ge=1)):
     return {"ok": True, "packet": result}
 
 
+@router.get("/settings", summary="Configuration en vigueur")
+async def settings_view(request: Request):
+    """Configuration actuelle, SANS AUCUN SECRET.
+
+    Les cles et jetons ne sont jamais renvoyes : on indique seulement s'ils sont
+    fournis. Une page de parametres ne doit pas devenir un moyen de lire les
+    secrets de l'installation.
+    """
+    s = request.app.state.settings
+    engine = engine_of(request)
+    return {
+        "ok": True,
+        "settings": {
+            "environnement": s.env,
+            "mode": s.mode,
+            "capture_locale": s.is_local,
+            "interface_par_defaut": s.capture_iface or None,
+            "memoire_paquets": s.max_packets_buffer,
+            "base_locale": str(s.sqlite_path),
+            "enrichissement": {
+                "actif": s.enrich_enabled,
+                "cache_heures": s.enrich_cache_ttl_hours,
+                "adresses_connues": len(engine._intel),
+                "en_attente": len(engine._enrich_pending),
+            },
+            "supabase": {
+                "actif": s.supabase_enabled,
+                "adresse_fournie": bool(s.supabase_url),
+                "cle_fournie": bool(s.supabase_service_key),
+            },
+            "assistant_ia": {
+                "actif": s.ai_enabled,
+                "fournisseur": s.ai_provider,
+                "modele": s.ai_model,
+                "cle_fournie": bool(s.ai_api_key),
+            },
+            "abuseipdb": {"cle_fournie": bool(s.abuseipdb_api_key)},
+            "secret_signe": {"fourni": len(s.secret_key) >= 32},
+        },
+        "problems": request.app.state.config_problems,
+    }
+
+
 @router.get("/devices", summary="Appareils du reseau local et services diffuses")
 async def devices(request: Request):
     """Ce que les appareils du reseau diffusent a tout le monde.

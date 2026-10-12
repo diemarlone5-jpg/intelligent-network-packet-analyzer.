@@ -79,6 +79,13 @@ class AnalyzerEngine:
         # Appareils du reseau local et services qu'ils diffusent (ARP, mDNS).
         self.devices = DeviceTable(self.parser.is_local)
 
+        # Courbe de trafic : un point toutes les ANALYSIS_INTERVAL_SECONDS, soit
+        # 100 points = 5 minutes. On y stocke le nombre de paquets DEPUIS le
+        # point precedent, pas le total cumule : une courbe de totaux ne fait
+        # que monter et n'apprend rien sur l'activite.
+        self._serie: deque[dict] = deque(maxlen=100)
+        self._serie_dernier: tuple[float, int, int] = (time.time(), 0, 0)
+
         # Compteurs incrementaux : les statistiques doivent rester instantanees
         # meme apres plusieurs centaines de milliers de paquets.
         self._counter = 0
@@ -208,6 +215,8 @@ class AnalyzerEngine:
             self._raw.clear()
             self.flows.clear()
             self.devices.clear()
+            self._serie.clear()
+            self._serie_dernier = (time.time(), 0, 0)
             self._counter = 0
             self._protocols.clear()
             self._sources.clear()
@@ -337,8 +346,34 @@ class AnalyzerEngine:
                 self._record_error(f"Analyse interrompue puis reprise : {type(exc).__name__}")
             self._stop_event.wait(ANALYSIS_INTERVAL_SECONDS)
 
+    def _echantillonner(self, now: float) -> None:
+        """Ajoute un point a la courbe de trafic.
+
+        Le point mesure ce qui s'est passe DEPUIS le precedent, divise par la
+        duree ecoulee : c'est un debit. Un total cumule ne fait que monter et ne
+        montrerait jamais un pic d'activite, qui est justement ce qu'on cherche
+        a voir.
+        """
+        with self._lock:
+            instant, paquets_avant, octets_avant = self._serie_dernier
+            total_paquets = self._counter
+            total_octets = self._total_bytes
+
+        ecart = now - instant
+        if ecart < 0.5:
+            return
+
+        self._serie.append({
+            "ts": round(now, 2),
+            "packets": max(0, total_paquets - paquets_avant),
+            "bytes": max(0, total_octets - octets_avant),
+            "seconds": round(ecart, 2),
+        })
+        self._serie_dernier = (now, total_paquets, total_octets)
+
     def _analyse_once(self) -> None:
         now = time.time()
+        self._echantillonner(now)
         self.flows.tick(now)
         flows = self.flows.snapshot()
         new_events = self.detectors.analyze(flows, now)
@@ -605,6 +640,8 @@ class AnalyzerEngine:
             # croire a une adresse sans pays.
             "geo_pending": len(self._enrich_pending),
             "geo_known": len(self._intel),
+            # Courbe de trafic : le tableau de bord la dessine telle quelle.
+            "traffic_series": list(self._serie),
             "public_destinations": sorted({
                 d for d, _ in destinations if classify_address(d) == "public"
             })[:12],

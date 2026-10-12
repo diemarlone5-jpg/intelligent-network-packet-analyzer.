@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Paramètres — Packet Analyzer{% endblock %}
+{% block heading %}Paramètres{% endblock %}
+{% block subheading %}Configuration en vigueur, état des services, données conservées.{% endblock %}
+
+{% block content %}
+
+<section class="toolbar">
+  <p class="toolbar-note">Tout est en lecture seule : la configuration se modifie dans le fichier <span class="mono">.env</span>.</p>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Configuration en vigueur</h2>
+    <span class="panel-hint">ce que l'application utilise réellement</span>
+  </header>
+  <dl class="kv" id="settings-config">
+    <div class="kv-row"><dt>—</dt><dd>Chargement…</dd></div>
+  </dl>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Configuration à corriger</h2>
+    <span class="panel-hint">vide = aucun problème détecté</span>
+  </header>
+  <div id="settings-problems">
+    <p class="empty">Chargement…</p>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Services dont dépend l'application</h2>
+    <span class="panel-hint">ce qui répond, et ce qui ne répond pas</span>
+  </header>
+  <div class="services" id="settings-services">
+    <p class="empty">Chargement…</p>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Données conservées</h2>
+    <span class="panel-hint">ce qui est écrit sur le disque</span>
+  </header>
+  <dl class="kv" id="settings-data">
+    <div class="kv-row"><dt>—</dt><dd>Chargement…</dd></div>
+  </dl>
+  <div class="actions">
+    <a class="btn btn--ghost btn--small" href="/api/export/packets.csv" download>
+      Exporter les paquets en CSV
+    </a>
+    <a class="btn btn--ghost btn--small" href="/api/export/flows.csv" download>
+      Exporter les communications en CSV
+    </a>
+    <a class="btn btn--ghost btn--small" href="/api/docs" target="_blank" rel="noopener">
+      Documentation de l'API
+    </a>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Apparence</h2>
+    <span class="panel-hint">choix conservé dans le navigateur</span>
+  </header>
+  <div class="actions">
+    <button class="btn btn--ghost" type="button" id="btn-theme-sombre">Thème sombre</button>
+    <button class="btn btn--ghost" type="button" id="btn-theme-clair">Thème clair</button>
+  </div>
+</section>
+
+<div class="callout callout--info">
+  <h3>Ce que cette page ne montre pas, volontairement</h3>
+  <p>
+    <strong>Aucun secret n'est affiché.</strong> Les clés d'API, le jeton Supabase et
+    la clé de signature restent dans le fichier <span class="mono">.env</span>, qui
+    n'est jamais enregistré dans Git. Cette page indique seulement s'ils sont
+    fournis — jamais leur valeur. Une page de paramètres ne doit pas devenir un
+    moyen de lire les secrets d'une installation.
+  </p>
+  <p>
+    La configuration se modifie dans le fichier <span class="mono">.env</span>, puis
+    en redémarrant l'application. C'est volontaire : une interface web qui
+    modifierait les réglages du moteur pourrait être détournée, et la
+    configuration resterait alors invisible dans le projet.
+  </p>
+</div>
+
+{% endblock %}
