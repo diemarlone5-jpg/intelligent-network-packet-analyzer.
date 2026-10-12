@@ -115,13 +115,42 @@ async def stats(request: Request):
 
 @router.get("/packets", summary="Paquets captures")
 async def packets(request: Request, limit: int = Query(200, ge=1, le=2000),
-                  protocol: str = "", search: str = ""):
-    return {
-        "ok": True,
-        "packets": engine_of(request).packet_snapshot(
-            limit=limit, protocol=protocol or None, search=search or None
-        ),
-    }
+                  protocol: str = "", search: str = "", filter: str = ""):
+    """Liste des paquets, avec filtre d'affichage optionnel.
+
+    Le filtre est compile et applique cote serveur. Une expression invalide est
+    refusee avec un code 400 et un message : elle ne doit jamais passer pour un
+    filtre qui ne trouve rien.
+    """
+    from app.analysis.display_filter import FilterSyntaxError, compile_filter
+
+    engine = engine_of(request)
+
+    predicat = None
+    if filter.strip():
+        try:
+            predicat = compile_filter(filter)
+        except FilterSyntaxError as erreur:
+            return JSONResponse(
+                {"ok": False, "error": str(erreur), "filter": filter},
+                status_code=400,
+            )
+
+    retenus = engine.packet_snapshot(
+        limit=limit, protocol=protocol or None,
+        search=search or None, predicate=predicat,
+    )
+    reponse = {"ok": True, "packets": retenus}
+    if predicat is not None:
+        reponse["filtered_total"] = engine.packet_count(predicat)
+    return reponse
+
+
+@router.get("/filter/syntax", summary="Syntaxe du filtre d'affichage")
+async def filter_syntax():
+    """Decrit la syntaxe acceptee, pour l'aide de l'interface."""
+    from app.analysis.display_filter import describe_syntax
+    return {"ok": True, "syntax": describe_syntax()}
 
 
 @router.get("/flows", summary="Communications observees")

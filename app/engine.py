@@ -385,7 +385,14 @@ class AnalyzerEngine:
     # Lecture pour l'interface
     # ==================================================================
     def packet_snapshot(self, limit: int = 200, protocol: str | None = None,
-                        search: str | None = None) -> list[dict]:
+                        search: str | None = None, predicate=None) -> list[dict]:
+        """Paquets recents, filtres puis tronques.
+
+        `predicate` recoit chaque paquet et retourne vrai pour le garder. Le
+        filtre est applique AVANT la troncature : sans cela, un filtre selectif
+        ne renverrait que ce qui reste des 200 derniers paquets, et non les 200
+        derniers paquets correspondants.
+        """
         with self._lock:
             records = list(self._packets)
         records.reverse()  # le plus recent en premier
@@ -400,7 +407,17 @@ class AnalyzerEngine:
                 or (r.domain and needle in r.domain)
                 or needle in (r.tcp_flags or "").lower()
             ]
+        if predicate is not None:
+            records = [r for r in records if predicate(r)]
         return [self._packet_view(r) for r in records[:limit]]
+
+    def packet_count(self, predicate=None) -> int:
+        """Nombre de paquets retenus par un filtre. Sert a annoncer « N sur M »."""
+        with self._lock:
+            records = list(self._packets)
+        if predicate is None:
+            return len(records)
+        return sum(1 for r in records if predicate(r))
 
     def _packet_view(self, record: PacketRecord) -> dict:
         """Vue enrichie d'un paquet : la geographie de l'interlocuteur y est

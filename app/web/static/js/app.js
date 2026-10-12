@@ -141,6 +141,13 @@
   }
 
   function ouvrirPaquet(numero) {
+    // Sur la page Paquets, cliquer sur une ligne SELECTIONNE le paquet et
+    // remplit les deux volets du bas, sans quitter la page : c'est le
+    // comportement de Wireshark. Ailleurs, on ouvre la page dediee.
+    if (window.__pkaSelectPacket) {
+      window.__pkaSelectPacket(numero);
+      return;
+    }
     window.location.href = "/packet?number=" + numero;
   }
 
@@ -658,25 +665,58 @@
     var body = $("#packet-rows");
     if (!body) return;
 
-    var searchInput = $("#packet-search");
-    var protocolSelect = $("#packet-protocol");
+    var champFiltre = $("#display-filter");
+    var boutonEffacer = $("#filtre-effacer");
+    var zoneMessage = $("#filtre-message");
     var counter = $("#packet-count");
-    var debounce = null;
+    var voletDetails = $("#packet-details");
+    var voletOctets = $("#packet-bytes");
+    var refVolet = $("#volet-ref");
+    var selection = null;     // numero du paquet actuellement selectionne
+    var derniers = [];        // paquets affiches, conserves pour la selection
+
+    function afficherMessage(texte, genre) {
+      if (!zoneMessage) return;
+      if (!texte) {
+        zoneMessage.hidden = true;
+        zoneMessage.textContent = "";
+        return;
+      }
+      zoneMessage.hidden = false;
+      zoneMessage.setAttribute("data-kind", genre || "erreur");
+      zoneMessage.textContent = texte;
+    }
 
     function load() {
       var params = new URLSearchParams({ limit: "300" });
-      if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
-      if (protocolSelect.value) params.set("protocol", protocolSelect.value);
+      var expression = champFiltre ? champFiltre.value.trim() : "";
+      if (expression) params.set("filter", expression);
 
       api("/api/packets?" + params.toString()).then(function (data) {
-        var records = data.packets || [];
-        counter.textContent = records.length + " paquet(s) affiché(s)";
-        replace(body, records.length ? records.map(function (record) {
+        derniers = data.packets || [];
+        afficherMessage("");
+        if (champFiltre) champFiltre.setAttribute("aria-invalid", "false");
+
+        var total = (typeof data.filtered_total === "number") ? data.filtered_total : null;
+        counter.textContent = (expression && total !== null)
+          ? derniers.length + " affiché(s) sur " + total + " filtré(s)"
+          : derniers.length + " paquet(s) affiché(s)";
+
+        replace(body, derniers.length ? derniers.map(function (record) {
           return packetTableRow(record);
-        }) : emptyRow(9, "Aucun paquet capturé pour l'instant."));
+        }) : emptyRow(9, expression
+            ? "Aucun paquet ne correspond à ce filtre."
+            : "Aucun paquet capturé pour l'instant."));
         suivreNouveaux();
+        remettreLaMarque();
       }).catch(function (error) {
-        counter.textContent = "Erreur : " + error.message;
+        // Expression refusee par le serveur : on le dit, et on LAISSE la liste
+        // precedente a l'ecran. La remplacer par un message d'erreur ferait
+        // perdre le travail en cours pour une simple faute de frappe.
+        if (champFiltre) champFiltre.setAttribute("aria-invalid", "true");
+        afficherMessage("Filtre refusé. " + error.message
+                        + "  Corrigez l'expression, ou cliquez sur « Effacer ».");
+        counter.textContent = derniers.length + " paquet(s) affiché(s)";
       });
     }
 
@@ -690,37 +730,133 @@
       if (zone.scrollTop < 60) zone.scrollTop = 0;
     }
 
-    searchInput.addEventListener("input", function () {
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(load, 220);
-    });
-    protocolSelect.addEventListener("change", load);
-
-    /* L'identification geographique se fait en arriere-plan, une adresse a la
-       fois. Tant qu'il en reste, un tiret dans la colonne Pays ne veut pas dire
-       « adresse sans pays » : on le dit explicitement. */
-    function noteGeographique() {
-      var note = $("#geo-note");
-      if (!note) return;
-      api("/api/stats").then(function (stats) {
-        var attente = stats.geo_pending || 0;
-        var connues = stats.geo_known || 0;
-        if (attente > 0) {
-          note.textContent = "· " + attente + " adresse(s) en cours d'identification";
-          note.title = "Les tirets de la colonne Pays correspondent à des adresses "
-                     + "pas encore identifiées, pas à des adresses sans pays.";
-        } else {
-          note.textContent = connues ? "· " + connues + " adresse(s) identifiée(s)" : "";
-          note.title = "";
+    /* Apres un rafraichissement, les lignes sont reconstruites : il faut
+       remettre la marque sur celle qui est selectionnee, sinon la selection
+       disparait a l'ecran toutes les 2,5 secondes. */
+    function remettreLaMarque() {
+      if (selection === null) return;
+      var lignes = body.querySelectorAll("tr.pkt-row");
+      for (var i = 0; i < lignes.length; i++) {
+        var premiere = lignes[i].querySelector("td");
+        if (premiere && premiere.textContent.trim() === String(selection)) {
+          lignes[i].classList.add("is-selected");
+          return;
         }
-      }).catch(function () { /* l'absence de cette note n'empeche pas la lecture */ });
+      }
     }
+
+    function marquer(numero) {
+      var lignes = body.querySelectorAll("tr.pkt-row");
+      for (var i = 0; i < lignes.length; i++) {
+        lignes[i].classList.remove("is-selected");
+      }
+      selection = numero;
+      remettreLaMarque();
+    }
+
+    /* Remplit les deux volets du bas. On ne recharge PAS la liste : c'est la
+       meme page, comme dans Wireshark. */
+    function selectionner(numero) {
+      marquer(numero);
+      if (refVolet) refVolet.textContent = "paquet n° " + numero + " — chargement…";
+
+      api("/api/packet?number=" + numero).then(function (data) {
+        var paquet = data.packet || {};
+        afficherDetails(paquet);
+        afficherOctets(paquet);
+        if (refVolet) {
+          refVolet.textContent = "paquet n° " + paquet.number + " · "
+            + (paquet.protocol || "?") + " · " + (paquet.size || 0) + " octets";
+        }
+      }).catch(function (error) {
+        if (refVolet) refVolet.textContent = "paquet n° " + numero;
+        replace(voletDetails, h("p", { class: "empty", text: error.message }));
+        if (voletOctets) voletOctets.textContent = "";
+      });
+    }
+
+    function afficherDetails(paquet) {
+      if (!voletDetails) return;
+      var dissection = paquet.dissection || {};
+      var morceaux = [];
+
+      if (dissection.error) {
+        morceaux.push(h("p", { class: "empty", text: dissection.error }));
+      }
+
+      var couches = dissection.layers || [];
+      if (!couches.length) {
+        morceaux.push(h("p", { class: "empty", text: "Aucune couche identifiée." }));
+      }
+
+      couches.forEach(function (couche) {
+        var lignes = (couche.fields || []).map(function (champ) {
+          return h("tr", { title: champ.label }, [
+            h("td", { class: "mono", text: champ.name }),
+            h("td", { class: "mono detail-value", text: champ.value })
+          ]);
+        });
+        morceaux.push(h("div", { class: "layer" }, [
+          h("p", { class: "layer-title", text: couche.name }),
+          h("p", { class: "layer-summary mono", text: couche.summary || "" }),
+          couches.length && lignes.length
+            ? h("table", { class: "table table--dense" }, h("tbody", null, lignes))
+            : null
+        ]));
+      });
+
+      replace(voletDetails, morceaux);
+    }
+
+    function afficherOctets(paquet) {
+      if (!voletOctets) return;
+      var lignes = (paquet.dissection || {}).hex || [];
+      voletOctets.textContent = lignes.map(function (ligne) {
+        return ligne.offset + "  " + ligne.hex + "  " + ligne.ascii;
+      }).join("\n") || "(aucun contenu disponible)";
+    }
+
+    /* ---- evenements ---- */
+
+    if (champFiltre) {
+      champFiltre.addEventListener("keydown", function (evenement) {
+        if (evenement.key === "Enter") {
+          evenement.preventDefault();
+          load();
+        }
+      });
+    }
+    if (boutonEffacer) {
+      boutonEffacer.addEventListener("click", function () {
+        if (champFiltre) champFiltre.value = "";
+        afficherMessage("");
+        if (champFiltre) champFiltre.setAttribute("aria-invalid", "false");
+        load();
+      });
+    }
+
+    // La selection est exposee pour que packetTableRow puisse l'appeler depuis
+    // n'importe quelle page.
+    window.__pkaSelectPacket = selectionner;
+
+    /* La syntaxe acceptee est demandee au serveur : l'aide reste ainsi
+       exactement alignee sur ce que le serveur sait interpreter. */
+    api("/api/filter/syntax").then(function (data) {
+      var syntaxe = data.syntax || {};
+      var zone = $("#aide-syntaxe");
+      if (zone) {
+        var champs = Object.keys(syntaxe.champs || {}).map(function (nom) {
+          return nom + " (" + syntaxe.champs[nom] + ")";
+        }).join(", ");
+        zone.textContent = "Champs disponibles : " + champs
+          + ".  Opérateurs : " + (syntaxe.operateurs || []).join(" ")
+          + ".  Logiques : " + (syntaxe.logiques || []).join(" ") + ".";
+      }
+    }).catch(function () { /* l'aide est secondaire */ });
 
     window.__pkaRefresh = load;
     load();
-    noteGeographique();
     setInterval(load, REFRESH_MS);
-    setInterval(noteGeographique, 10000);
   }
 
   /* ------------------------------------------------------- 3. communications */

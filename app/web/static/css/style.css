@@ -801,6 +801,146 @@ body.page-fill .table--packets td { padding: 5px 9px; }
 }
 .toolbar-help-body p { margin: 0 0 9px; }
 .toolbar-help-body p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------------------------------
+   VUE A TROIS VOLETS (page Paquets)
+
+   Disposition de Wireshark : la liste des paquets en haut, le detail des
+   couches au milieu, le contenu brut en bas. Les trois sont visibles en meme
+   temps et se mettent a jour ensemble quand on clique un paquet : il n'y a plus
+   besoin de changer de page pour lire un paquet.
+   -------------------------------------------------------------------------- */
+
+body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
+
+.wireshark {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ---- barre de filtre d'affichage ---- */
+.filtre-barre {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+}
+
+.filtre-champ {
+  flex: 1 1 300px;
+  min-width: 180px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 7px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.filtre-champ::placeholder { color: var(--text-dim); }
+.filtre-champ:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.filtre-champ[aria-invalid="true"] { border-color: #e05252; }
+
+.filtre-message {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: rgba(224, 82, 82, 0.12);
+  border: 1px solid rgba(224, 82, 82, 0.45);
+  color: var(--text);
+}
+.filtre-message[data-kind="ok"] {
+  background: rgba(79, 192, 112, 0.12);
+  border-color: rgba(79, 192, 112, 0.45);
+}
+
+.aide-liste { margin: 4px 0 9px; padding-left: 18px; }
+.aide-liste li { margin-bottom: 3px; font-size: 12px; }
+
+/* ---- les trois volets ---- */
+.volet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.volet--liste { flex: 1 1 auto; }
+.volet--details { flex: 0 0 26%; }
+.volet--octets { flex: 0 0 21%; }
+
+.volet-entete {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  font-weight: 650;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.volet-ref {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.volet-corps { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px; }
+
+/* Le tableau defile dans son propre volet, pas dans la page. */
+.wireshark .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+/* Le detail doit etre dense : c'est un panneau d'inspection, pas une page. */
+.wireshark .layer { margin-bottom: 10px; }
+.wireshark .layer-title { font-size: 12.5px; margin: 0 0 2px; }
+.wireshark .layer-summary { font-size: 11px; margin: 0 0 4px; color: var(--text-dim); }
+.wireshark .layer .table th,
+.wireshark .layer .table td { padding: 2px 8px; font-size: 11.5px; }
+.wireshark .layer .table-wrap { overflow: visible; }
+
+.wireshark .hexdump {
+  margin: 0;
+  padding: 8px 12px;
+  height: 100%;
+  overflow: auto;
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+/* La ligne selectionnee doit se distinguer nettement : c'est elle qui alimente
+   les deux volets du bas. */
+.pkt-row.is-selected > td {
+  background: var(--accent-soft);
+  box-shadow: inset 0 -1px 0 var(--accent), inset 0 1px 0 var(--accent);
+}
+.pkt-row.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent), inset 0 -1px 0 var(--accent), inset 0 1px 0 var(--accent); }
 .table--dense td, .table--dense th { padding: 6px 9px; font-size: 12.5px; }
 .table .mono { background: transparent; border: none; padding: 0; font-size: 12px; }
 

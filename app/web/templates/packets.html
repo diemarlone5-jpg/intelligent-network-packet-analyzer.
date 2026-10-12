@@ -2,86 +2,96 @@
 {% block title %}Paquets — Packet Analyzer{% endblock %}
 {% block body_class %}page-fill{% endblock %}
 {% block heading %}Paquets capturés{% endblock %}
-{% block subheading %}Chaque ligne est un paquet réellement observé. Cliquez pour voir son contenu.{% endblock %}
+{% block subheading %}Liste, détail et contenu brut sur un seul écran.{% endblock %}
 
 {% block content %}
 
-<section class="toolbar">
-  <label class="field">
-    <span class="field-label">Rechercher</span>
-    <input id="packet-search" class="input" type="search"
-           placeholder="adresse IP, domaine ou drapeau TCP" autocomplete="off">
-  </label>
+<section class="wireshark">
 
-  <label class="field">
-    <span class="field-label">Protocole</span>
-    <select id="packet-protocol" class="input input--select">
-      <option value="">tous</option>
-      <option value="TCP">TCP</option>
-      <option value="UDP">UDP</option>
-      <option value="TLS">TLS</option>
-      <option value="DNS">DNS</option>
-      <option value="HTTP">HTTP</option>
-      <option value="ICMP">ICMP</option>
-      <option value="ARP">ARP</option>
-    </select>
-  </label>
+  {# ---- Barre de filtre d'affichage : l'equivalent de « Apply a display
+         filter » de Wireshark. Le filtre est compile par le serveur ; une
+         expression invalide est refusee avec un message, jamais presentee comme
+         un filtre qui ne trouve rien. ---- #}
+  <div class="filtre-barre">
+    <label class="visually-hidden" for="display-filter">Filtre d'affichage</label>
+    <input id="display-filter" class="filtre-champ" type="text" autocomplete="off"
+           spellcheck="false"
+           placeholder='Filtre d&apos;affichage — ex. tcp.port == 443   (Entrée pour appliquer)'>
 
-  <label class="field field--check">
-    <input id="packet-follow" type="checkbox" checked>
-    <span>Suivre les nouveaux</span>
-  </label>
+    <button id="filtre-effacer" class="btn btn--ghost btn--small" type="button">Effacer</button>
 
-  <p class="toolbar-note" id="packet-count">—</p>
-  <span class="toolbar-note" id="geo-note"></span>
+    <label class="field field--check">
+      <input id="packet-follow" type="checkbox" checked>
+      <span>Suivre</span>
+    </label>
 
-  <a class="btn btn--ghost btn--small" href="/api/export/packets.csv" download>
-    Exporter en CSV
-  </a>
+    <p class="toolbar-note" id="packet-count">—</p>
 
-  <details class="toolbar-help">
-    <summary>Aide</summary>
-    <div class="toolbar-help-body">
-      <p>
-        Cette liste ne montre que des <strong>faits observés</strong> : qui, vers qui,
-        quel protocole, quelle taille. <strong>Cliquez sur une ligne</strong> pour ouvrir
-        le détail du paquet — couches empilées et contenu brut.
-      </p>
-      <p>
-        La colonne <strong>Pays</strong> vient d'une base externe interrogée
-        automatiquement : elle situe l'adresse <em>déclarée</em> auprès des registres
-        Internet, pas la position d'une personne. Un tiret signifie « information pas
-        encore obtenue », pas « adresse anonyme ».
-      </p>
-      <p>
-        Le liseré de couleur à gauche reprend les conventions de Wireshark :
-        bleu pour DNS, violet pour TLS, vert pour HTTP, orange pour ICMP.
-      </p>
-    </div>
-  </details>
-</section>
+    <a class="btn btn--ghost btn--small" href="/api/export/packets.csv" download
+       title="Exporter les paquets affichés au format CSV">CSV</a>
 
-<section class="panel panel--fill">
-  <div class="table-wrap" id="packet-scroll">
-    <table class="table table--dense table--packets">
-      <thead>
-        <tr>
-          <th scope="col">N°</th>
-          <th scope="col">Instant</th>
-          <th scope="col">Source</th>
-          <th scope="col">Destination</th>
-          <th scope="col">Protocole</th>
-          <th scope="col">Taille</th>
-          <th scope="col">Pays</th>
-          <th scope="col">Organisation</th>
-          <th scope="col">Résumé</th>
-        </tr>
-      </thead>
-      <tbody id="packet-rows">
-        <tr><td colspan="9" class="empty">Aucun paquet capturé pour l'instant.</td></tr>
-      </tbody>
-    </table>
+    <details class="toolbar-help">
+      <summary>Aide</summary>
+      <div class="toolbar-help-body">
+        <p><strong>Filtre d'affichage.</strong> Quelques exemples :</p>
+        <ul class="aide-liste mono" id="aide-exemples">
+          <li>tcp</li>
+          <li>dns and ip.addr == 8.8.8.8</li>
+          <li>not arp and size &gt; 500</li>
+          <li>tcp.port == 443</li>
+          <li>(tcp or udp) and size &gt; 1000</li>
+          <li>contains "telegram"</li>
+        </ul>
+        <p id="aide-syntaxe">Chargement de la syntaxe complète…</p>
+      </div>
+    </details>
   </div>
+
+  <p class="filtre-message" id="filtre-message" hidden role="alert"></p>
+
+  {# ---- Volet 1 : la liste des paquets ---- #}
+  <div class="volet volet--liste">
+    <div class="table-wrap" id="packet-scroll">
+      <table class="table table--dense table--packets">
+        <thead>
+          <tr>
+            <th scope="col">N°</th>
+            <th scope="col">Instant</th>
+            <th scope="col">Source</th>
+            <th scope="col">Destination</th>
+            <th scope="col">Protocole</th>
+            <th scope="col">Taille</th>
+            <th scope="col">Pays</th>
+            <th scope="col">Organisation</th>
+            <th scope="col">Résumé</th>
+          </tr>
+        </thead>
+        <tbody id="packet-rows">
+          <tr><td colspan="9" class="empty">Aucun paquet capturé pour l'instant.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ---- Volet 2 : les couches empilees (equivalent du « Packet Details Pane ») ---- #}
+  <div class="volet volet--details">
+    <div class="volet-entete">
+      <span>Détails du paquet</span>
+      <span class="volet-ref" id="volet-ref">aucun paquet sélectionné</span>
+    </div>
+    <div class="volet-corps" id="packet-details">
+      <p class="empty">Cliquez sur une ligne de la liste pour voir ses couches.</p>
+    </div>
+  </div>
+
+  {# ---- Volet 3 : le contenu brut (equivalent du « Packet Bytes Pane ») ---- #}
+  <div class="volet volet--octets">
+    <div class="volet-entete"><span>Contenu brut</span>
+      <span class="volet-ref">position · hexadécimal · caractères</span>
+    </div>
+    <pre class="hexdump" id="packet-bytes"></pre>
+  </div>
+
 </section>
 
 {% endblock %}

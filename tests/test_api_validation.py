@@ -111,3 +111,32 @@ def test_un_paquet_inexistant_est_signale(client):
     reponse = client.get("/api/packet", params={"number": 999999999})
     assert reponse.status_code == 404
     assert reponse.json()["ok"] is False
+
+
+# --------------------------------------------------------------------------
+# Filtre d'affichage
+# --------------------------------------------------------------------------
+
+
+def test_un_filtre_valide_est_accepte(client):
+    reponse = client.get("/api/packets", params={"filter": "tcp"})
+    assert reponse.status_code == 200
+    assert reponse.json()["ok"] is True
+
+
+def test_un_filtre_invalide_est_refuse_avec_un_message(client):
+    """Le point cle : une faute de frappe ne doit pas passer pour un filtre vide."""
+    reponse = client.get("/api/packets", params={"filter": "tcp.pot == 443"})
+    assert reponse.status_code == 400
+    corps = reponse.json()
+    assert corps["ok"] is False
+    assert "tcp.pot" in corps["error"]
+
+
+def test_la_syntaxe_du_filtre_est_exposee(client):
+    reponse = client.get("/api/filter/syntax")
+    assert reponse.status_code == 200
+    syntaxe = reponse.json()["syntax"]
+    assert "tcp" in syntaxe["protocoles"]
+    assert "ip.addr" in syntaxe["champs"]
+    assert syntaxe["exemples"]
