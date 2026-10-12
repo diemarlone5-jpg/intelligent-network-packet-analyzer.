@@ -602,6 +602,8 @@
     var protoChart = $("#protocol-chart");
     var portChart = $("#port-chart");
     var trafficChart = $("#traffic-chart");
+    var sizeChart = $("#size-chart");
+    var hierarchyChart = $("#hierarchy-chart");
     var sources = $("#top-sources");
     var destinations = $("#top-destinations");
     var eventsBox = $("#recent-events");
@@ -623,6 +625,27 @@
           h("span", { class: "bar-label", text: item[labelKey], title: item[labelKey] }),
           h("div", { class: "bar-track" }, remplissage),
           h("span", { class: "bar-value", text: String(item[countKey]) + (unitLabel || "") })
+        ]);
+      });
+    }
+
+    /* Hierarchie par volume : la barre represente la PART du total, alors que
+       barRows la represente par rapport au plus gros. Deux graphiques de la meme
+       page ne doivent pas melanger les deux echelles sans le dire : ici, la
+       longueur totale de la piste vaut 100 %.
+
+       Aucune largeur minimale n'est imposee. Une barre d'appoint visible pour un
+       protocole a 0 % serait un graphique qui exagere ; le chiffre exact est
+       ecrit juste a cote, c'est lui qui fait foi. */
+    function hierRows(items) {
+      return items.map(function (item) {
+        var remplissage = h("div", { class: "bar-fill" });
+        remplissage.style.width = Math.min(100, item.percent) + "%";
+        return h("div", { class: "bar-row" }, [
+          h("span", { class: "bar-label", text: item.name, title: item.name }),
+          h("div", { class: "bar-track" }, remplissage),
+          h("span", { class: "bar-value",
+                      text: fmtBytes(item.bytes) + " · " + item.percent + " %" })
         ]);
       });
     }
@@ -689,6 +712,20 @@
       // Courbe d'activite : le serveur fournit un debit par seconde, la page
       // ne fait que le dessiner.
       dessinerCourbe(trafficChart, stats.traffic_series || []);
+
+      // Repartition par taille : on garde toutes les tranches, y compris vides,
+      // pour que les barres ne se collent pas les unes aux autres.
+      var tailles = stats.size_distribution || [];
+      var taillesUtiles = tailles.filter(function (t) { return t.count > 0; });
+      replace(sizeChart, tailles.length && taillesUtiles.length
+        ? barRows(tailles, "label", "count", " paquets")
+        : h("p", { class: "empty", text: "Aucune donnée pour l'instant." }));
+
+      // Hierarchie par volume : ce qui occupe reellement le reseau.
+      var hierarchie = stats.protocol_hierarchy || [];
+      replace(hierarchyChart, hierarchie.length
+        ? hierRows(hierarchie)
+        : h("p", { class: "empty", text: "Aucune donnée pour l'instant." }));
       replace(protoChart, protoItems.length
         ? barRows(protoItems, "name", "count", "")
         : h("p", { class: "empty", text: "Aucune donnée : démarrez une capture pour observer le trafic." }));

@@ -28,6 +28,7 @@ from app.analysis.explain import Explainer
 from app.analysis.flows import FlowTable
 from app.analysis.parser import PacketParser
 from app.analysis.protocols import classify_address
+from app.analysis.statistics import hierarchie, repartition_depuis_comptes, tranche_de
 from app.capture.agent import CaptureAgent
 from app.capture.interfaces import local_ips
 from app.models import Event, Flow, PacketRecord
@@ -90,6 +91,12 @@ class AnalyzerEngine:
         # meme apres plusieurs centaines de milliers de paquets.
         self._counter = 0
         self._protocols: Counter[str] = Counter()
+        # Volume par protocole, en octets : un protocole minoritaire en nombre de
+        # paquets peut etre majoritaire en volume. Compter les paquets ne repond
+        # pas a « qu'est-ce qui occupe ma connexion ? ».
+        self._protocol_bytes: Counter[str] = Counter()
+        # Nombre de paquets par tranche de taille.
+        self._size_buckets: Counter[str] = Counter()
         self._sources: Counter[str] = Counter()
         self._destinations: Counter[str] = Counter()
         self._ports: Counter[str] = Counter()
@@ -219,6 +226,8 @@ class AnalyzerEngine:
             self._serie_dernier = (time.time(), 0, 0)
             self._counter = 0
             self._protocols.clear()
+            self._protocol_bytes.clear()
+            self._size_buckets.clear()
             self._sources.clear()
             self._destinations.clear()
             self._ports.clear()
@@ -254,6 +263,8 @@ class AnalyzerEngine:
             # Compteurs statistiques
             self._total_bytes += record.size
             self._protocols[record.protocol] += 1
+            self._protocol_bytes[record.protocol] += record.size
+            self._size_buckets[tranche_de(record.size)] += 1
             self._sources[record.src] += 1
             self._destinations[record.dst] += 1
             if record.dst_port is not None:
@@ -662,6 +673,10 @@ class AnalyzerEngine:
             "geo_known": len(self._intel),
             # Courbe de trafic : le tableau de bord la dessine telle quelle.
             "traffic_series": list(self._serie),
+            # Repartition par taille et hierarchie par volume : calculees a partir
+            # de compteurs incrementaux, pas en reparcourant la capture.
+            "size_distribution": repartition_depuis_comptes(self._size_buckets),
+            "protocol_hierarchy": hierarchie(self._protocol_bytes),
             "public_destinations": sorted({
                 d for d, _ in destinations if classify_address(d) == "public"
             })[:12],
