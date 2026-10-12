@@ -148,6 +148,84 @@ def test_la_page_des_parametres_repond(client):
     assert "Paramètres" in reponse.text
 
 
+def test_la_carte_des_relations_agrege_par_interlocuteur():
+    """Une machine peut ouvrir vingt connexions au meme service : la carte doit
+    montrer UN interlocuteur, pas vingt traits superposes."""
+    from app.engine import AnalyzerEngine
+    from app.models import Flow
+
+    moteur = AnalyzerEngine.__new__(AnalyzerEngine)
+    moteur._intel = {}
+
+    class FauxFlux:
+        def snapshot(self):
+            return [
+                Flow(key="a", src="192.168.1.10", dst="1.1.1.1", src_port=1, dst_port=443,
+                     transport="TCP", first_seen=0, last_seen=1,
+                     packets=5, bytes_total=500, app_protocol="TLS"),
+                Flow(key="b", src="192.168.1.10", dst="1.1.1.1", src_port=2, dst_port=443,
+                     transport="TCP", first_seen=0, last_seen=1,
+                     packets=5, bytes_total=300, app_protocol="TLS"),
+                Flow(key="c", src="192.168.1.10", dst="8.8.8.8", src_port=3, dst_port=53,
+                     transport="UDP", first_seen=0, last_seen=1,
+                     packets=2, bytes_total=200, app_protocol="DNS"),
+            ]
+
+    moteur.flows = FauxFlux()
+    moteur.parser = type("P", (), {"is_local": staticmethod(
+        lambda ip: ip.startswith("192.168."))})()
+
+    carte = moteur.peer_map(limit=10)
+
+    assert carte["total_peers"] == 2
+    premier = carte["peers"][0]
+    assert premier["ip"] == "1.1.1.1"
+    assert premier["bytes"] == 800          # les deux flux sont additionnes
+    assert premier["flows"] == 2
+    assert premier["percent"] == 80.0
+    assert premier["protocol"] == "TLS"
+
+
+def test_la_carte_des_relations_signale_ce_qu_elle_ne_montre_pas():
+    """Sans ce total, la carte laisserait croire qu'elle montre tout."""
+    from app.engine import AnalyzerEngine
+    from app.models import Flow
+
+    moteur = AnalyzerEngine.__new__(AnalyzerEngine)
+    moteur._intel = {}
+
+    class FauxFlux:
+        def snapshot(self):
+            return [
+                Flow(key=str(i), src="192.168.1.10", dst="10.0.0.%d" % i,
+                     src_port=i, dst_port=443, transport="TCP",
+                     first_seen=0, last_seen=1, packets=1, bytes_total=100 * (i + 1))
+                for i in range(6)
+            ]
+
+    moteur.flows = FauxFlux()
+    moteur.parser = type("P", (), {"is_local": staticmethod(
+        lambda ip: ip.startswith("192.168."))})()
+
+    carte = moteur.peer_map(limit=3)
+    assert len(carte["peers"]) == 3
+    assert carte["others"]["count"] == 3
+    assert carte["others"]["bytes"] > 0
+
+
+def test_la_carte_des_relations_ne_plante_pas_sur_une_capture_vide():
+    from app.engine import AnalyzerEngine
+
+    moteur = AnalyzerEngine.__new__(AnalyzerEngine)
+    moteur._intel = {}
+    moteur.flows = type("F", (), {"snapshot": staticmethod(lambda: [])})()
+    moteur.parser = type("P", (), {"is_local": staticmethod(lambda ip: False)})()
+
+    carte = moteur.peer_map()
+    assert carte["peers"] == []
+    assert carte["total_peers"] == 0
+
+
 def test_les_parametres_n_exposent_aucun_secret(client):
     """Une page de reglages ne doit jamais devenir un moyen de lire les cles.
 

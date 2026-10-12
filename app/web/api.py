@@ -178,6 +178,17 @@ async def packet_detail(request: Request, number: int = Query(..., ge=1)):
     return {"ok": True, "packet": result}
 
 
+@router.get("/peermap", summary="Qui parle a qui, agrege par interlocuteur")
+async def peermap(request: Request, limit: int = Query(14, ge=1, le=60)):
+    """Carte des relations depuis le point de vue de cette machine.
+
+    Le centre est la seule position que la capture permet de connaitre : on ne
+    voit pas le trafic des autres appareils du reseau. La carte le dit dans sa
+    legende plutot que de laisser croire qu'elle montre tout.
+    """
+    return {"ok": True, **engine_of(request).peer_map(limit=limit)}
+
+
 @router.get("/settings", summary="Configuration en vigueur")
 async def settings_view(request: Request):
     """Configuration actuelle, SANS AUCUN SECRET.

@@ -883,6 +883,17 @@ body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
                       color: var(--warn-text, #e8b45a); }
 .vide-ok { margin: 0; font-size: 12.5px; color: var(--text-dim); }
 
+/* ---- carte des relations (page Communications) ---- */
+.peermap svg { width: 100%; height: auto; display: block; max-height: 470px; }
+.relation { stroke: var(--accent); stroke-opacity: .38; }
+.relation--interne { stroke: var(--text-dim); stroke-dasharray: 4 3; }
+.relation-noeud { fill: var(--accent); }
+.relation-centre { fill: var(--text); stroke: var(--accent); stroke-width: 3; }
+.relation-centre-texte { fill: var(--bg); font-size: 10px; font-weight: 700; }
+.relation-etiquette { fill: var(--text); font-size: 12px; font-weight: 600; }
+.relation-part { fill: var(--text-dim); font-size: 10.5px; font-family: var(--mono); }
+.relation-reste { fill: var(--text-dim); font-size: 11px; font-style: italic; }
+
 /* ---- les trois volets ---- */
 .volet {
   display: flex;

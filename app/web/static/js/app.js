@@ -170,6 +170,90 @@
     return Math.round(secondes / 60) + " min";
   }
 
+  /* Carte des relations : cette machine au centre, ses interlocuteurs autour.
+
+     Le centre est le seul point de vue que la capture permet de connaitre : on
+     ne voit pas le trafic des autres appareils du reseau. La carte le dit, au
+     lieu de laisser croire qu'elle montre tout le reseau.
+
+     Dessinee en SVG, sans bibliotheque : la politique de securite du serveur
+     n'autorise que nos propres ressources. */
+  function dessinerCarteRelations(zone, donnees) {
+    if (!zone) return;
+    var pairs = (donnees && donnees.peers) || [];
+    if (!pairs.length) {
+      replace(zone, h("p", { class: "empty", text: "Aucune communication pour l'instant." }));
+      return;
+    }
+
+    var L = 900, H = 470;
+    var cx = L / 2, cy = H / 2;
+    var rayon = Math.min(L / 2 - 150, H / 2 - 62);
+    var maxi = Math.max.apply(null, pairs.map(function (p) { return p.bytes; })) || 1;
+    var enfants = [];
+
+    pairs.forEach(function (pair, i) {
+      var angle = (-Math.PI / 2) + (i * 2 * Math.PI / pairs.length);
+      var x = cx + Math.cos(angle) * rayon;
+      var y = cy + Math.sin(angle) * rayon;
+      var part = pair.bytes / maxi;
+
+      // Le trait : son epaisseur suit le volume, donc le trafic reel.
+      enfants.push(s("line", {
+        class: "relation" + (pair.direction === "interne" ? " relation--interne" : ""),
+        x1: cx, y1: cy, x2: Math.round(x), y2: Math.round(y),
+        "stroke-width": (0.7 + 6 * part).toFixed(2)
+      }));
+
+      // Le noeud : la taille suit aussi le volume.
+      enfants.push(s("circle", {
+        class: "relation-noeud",
+        cx: Math.round(x), cy: Math.round(y), r: (3 + 6 * part).toFixed(2)
+      }));
+
+      // L'etiquette : l'organisation si on la connait, sinon l'adresse.
+      var nom = pair.organization || pair.ip;
+      if (nom.length > 26) nom = nom.slice(0, 25) + "…";
+      var aDroite = Math.cos(angle) >= 0;
+      var texte = s("text", {
+        class: "relation-etiquette",
+        x: Math.round(cx + Math.cos(angle) * (rayon + 16)),
+        y: Math.round(cy + Math.sin(angle) * (rayon + 16) + 4),
+        "text-anchor": aDroite ? "start" : "end"
+      }, nom);
+      enfants.push(texte);
+
+      enfants.push(s("text", {
+        class: "relation-part",
+        x: Math.round(cx + Math.cos(angle) * (rayon + 16)),
+        y: Math.round(cy + Math.sin(angle) * (rayon + 16) + 18),
+        "text-anchor": aDroite ? "start" : "end"
+      }, fmtBytes(pair.bytes) + " · " + pair.percent + " %"));
+    });
+
+    // Le centre.
+    enfants.push(s("circle", { class: "relation-centre", cx: cx, cy: cy, r: 13 }));
+    enfants.push(s("text", {
+      class: "relation-centre-texte", x: cx, y: cy + 4, "text-anchor": "middle"
+    }, "moi"));
+
+    var reste = (donnees && donnees.others) || { count: 0, bytes: 0 };
+    if (reste.count > 0) {
+      enfants.push(s("text", {
+        class: "relation-reste", x: cx, y: H - 8, "text-anchor": "middle"
+      }, "et " + reste.count + " autre(s) interlocuteur(s), " +
+         fmtBytes(reste.bytes) + " — non représentés pour rester lisible"));
+    }
+
+    replace(zone, s("svg", {
+      viewBox: "0 0 " + L + " " + H,
+      preserveAspectRatio: "xMidYMid meet",
+      role: "img",
+      "aria-label": "Carte des relations : " + pairs.length +
+                    " interlocuteur(s) de cette machine"
+    }, enfants));
+  }
+
   function fmtBytes(n) {
     var value = Number(n) || 0;
     if (value < 1024) return value + " o";
@@ -1024,6 +1108,20 @@
   function initFlows() {
     var body = $("#flow-rows");
     if (!body) return;
+
+    // Carte des relations : chargee une fois puis rafraichie moins souvent que
+    // la liste, car elle resume l'ensemble et change lentement.
+    var carte = $("#peermap");
+    function chargerCarte() {
+      if (!carte) return;
+      api("/api/peermap").then(function (data) {
+        dessinerCarteRelations(carte, data);
+      }).catch(function (erreur) {
+        replace(carte, h("p", { class: "empty", text: "Indisponible : " + erreur.message }));
+      });
+    }
+    chargerCarte();
+    setInterval(chargerCarte, REFRESH_MS * 3);
 
     var activeOnly = $("#flows-active-only");
     var counter = $("#flow-count");

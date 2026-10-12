@@ -450,6 +450,87 @@ class AnalyzerEngine:
                 sortie.append((record.ts, octets, record.size))
         return sortie
 
+    def peer_map(self, limit: int = 14) -> dict:
+        """Qui parle a qui, agrege par interlocuteur.
+
+        Le centre est CETTE machine, parce que c'est le seul point de vue que la
+        capture permet de connaitre de facon sure : on ne voit pas le trafic des
+        autres appareils du reseau (le chiffrement Wi-Fi et les switchs s'y
+        opposent), et la carte ne doit pas laisser croire le contraire.
+
+        L'agregation se fait par interlocuteur et non par flux : une machine qui
+        ouvre vingt connexions au meme service produirait vingt traits
+        superposes, et la carte deviendrait illisible.
+        """
+        agregat: dict[str, dict] = {}
+
+        for flux in self.flows.snapshot():
+            cote_source = self.parser.is_local(flux.src)
+            cote_destination = self.parser.is_local(flux.dst)
+
+            if cote_source and not cote_destination:
+                distant, sens = flux.dst, "sortant"
+            elif cote_destination and not cote_source:
+                distant, sens = flux.src, "entrant"
+            elif cote_source and cote_destination:
+                distant, sens = flux.dst, "interne"
+            else:
+                # Ni l'un ni l'autre n'est local : on ne peut pas dire de quel
+                # cote se trouve cette machine. On le signale plutot que de
+                # ranger l'echange dans une categorie au hasard.
+                distant, sens = flux.dst, "indetermine"
+
+            entree = agregat.get(distant)
+            if entree is None:
+                entree = agregat[distant] = {
+                    "ip": distant, "bytes": 0, "packets": 0, "flows": 0,
+                    "direction": sens, "protocols": Counter(),
+                }
+            entree["bytes"] += flux.bytes_total
+            entree["packets"] += flux.packets
+            entree["flows"] += 1
+            if flux.app_protocol:
+                entree["protocols"][flux.app_protocol] += flux.bytes_total
+            elif flux.transport:
+                entree["protocols"][flux.transport] += flux.bytes_total
+
+        total = sum(e["bytes"] for e in agregat.values()) or 1
+        elements = sorted(agregat.values(), key=lambda e: -e["bytes"])[:limit]
+
+        interlocuteurs = []
+        for entree in elements:
+            # _intel contient des dictionnaires, pas des objets : on lit les
+            # champs par leur cle. Un echec d'enrichissement y laisse une entree
+            # avec « error » et aucun pays : on ne l'affiche pas comme une donnee.
+            intel = self._intel.get(entree["ip"]) or {}
+            if intel.get("error"):
+                intel = {}
+            protocole = (entree["protocols"].most_common(1) or [("", 0)])[0][0]
+            interlocuteurs.append({
+                "ip": entree["ip"],
+                "bytes": entree["bytes"],
+                "packets": entree["packets"],
+                "flows": entree["flows"],
+                "direction": entree["direction"],
+                "protocol": protocole or "—",
+                "percent": round(entree["bytes"] * 100.0 / total, 1),
+                "country": intel.get("country"),
+                "organization": intel.get("org"),
+            })
+
+        # Le reste, sous forme de total : sans lui, la carte laisserait croire
+        # qu'elle montre tout le trafic alors qu'elle n'en montre qu'une part.
+        reste = len(agregat) - len(elements)
+        octets_reste = sum(e["bytes"] for e in agregat.values()) - sum(
+            e["bytes"] for e in elements)
+
+        return {
+            "peers": interlocuteurs,
+            "others": {"count": max(0, reste), "bytes": max(0, octets_reste)},
+            "total_bytes": total,
+            "total_peers": len(agregat),
+        }
+
     def packet_snapshot(self, limit: int = 200, protocol: str | None = None,
                         search: str | None = None, predicate=None) -> list[dict]:
         """Paquets recents, filtres puis tronques.
