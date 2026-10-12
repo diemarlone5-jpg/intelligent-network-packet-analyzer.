@@ -918,13 +918,21 @@
     }
     replierVolets(true);
 
-    function afficherMessage(texte, genre) {
+    /* Le message affiche appartient a quelqu'un : soit au filtre (une expression
+       refusee), soit a l'import d'un fichier. Sans cette distinction, le
+       rafraichissement de la liste effacait aussitot la confirmation d'import,
+       et l'utilisateur n'avait aucun retour. */
+    var messageDuFiltre = false;
+
+    function afficherMessage(texte, genre, origine) {
       if (!zoneMessage) return;
       if (!texte) {
+        messageDuFiltre = false;
         zoneMessage.hidden = true;
         zoneMessage.textContent = "";
         return;
       }
+      messageDuFiltre = (origine === "filtre");
       zoneMessage.hidden = false;
       zoneMessage.setAttribute("data-kind", genre || "erreur");
       zoneMessage.textContent = texte;
@@ -937,7 +945,9 @@
 
       api("/api/packets?" + params.toString()).then(function (data) {
         derniers = data.packets || [];
-        afficherMessage("");
+        // On n'efface que le message du filtre : la confirmation d'un import de
+        // fichier doit rester lisible apres le rafraichissement de la liste.
+        if (messageDuFiltre) afficherMessage("");
         if (champFiltre) champFiltre.setAttribute("aria-invalid", "false");
 
         var total = (typeof data.filtered_total === "number") ? data.filtered_total : null;
@@ -957,8 +967,8 @@
         // precedente a l'ecran. La remplacer par un message d'erreur ferait
         // perdre le travail en cours pour une simple faute de frappe.
         if (champFiltre) champFiltre.setAttribute("aria-invalid", "true");
-        afficherMessage("Filtre refusé. " + error.message
-                        + "  Corrigez l'expression, ou cliquez sur « Effacer ».");
+        afficherMessage("Filtre refusé — " + error.message + " Corrigez l'expression "
+                        + "ou cliquez sur « Effacer ».", "erreur", "filtre");
         counter.textContent = derniers.length + " paquet(s) affiché(s)";
       });
     }
