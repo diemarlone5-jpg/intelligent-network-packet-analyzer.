@@ -148,6 +148,38 @@ def test_la_page_des_parametres_repond(client):
     assert "Paramètres" in reponse.text
 
 
+def test_la_documentation_de_l_api_s_affiche_vraiment(client):
+    """La documentation integree de FastAPI chargeait ses ressources depuis un
+    CDN, que la politique de securite bloque : la page etait ENTIEREMENT
+    BLANCHE. Elle est remplacee par une page maison."""
+    reponse = client.get("/api/docs")
+    assert reponse.status_code == 200
+    page = reponse.text
+
+    # Aucune ressource externe : c'est la cause du probleme d'origine.
+    for externe in ("cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com",
+                    "fastapi.tiangolo.com", "http://", "https://"):
+        assert externe not in page, "ressource externe dans la documentation"
+
+    # Elle doit etre utile : les routes principales y figurent.
+    for chemin in ("/api/stats", "/api/packets", "/api/export/packets.pcap"):
+        assert chemin in page, "route absente de la documentation"
+
+    # Et rester structuree, pas un simple listing.
+    assert "État et statistiques" in page
+    assert "Export de la capture" in page
+
+
+def test_le_schema_openapi_reste_disponible(client):
+    """La page maison ne doit pas supprimer le schema : les outils externes
+    (Postman, generateurs de client) s'en servent."""
+    reponse = client.get("/api/openapi.json")
+    assert reponse.status_code == 200
+    schema = reponse.json()
+    assert "/api/stats" in schema["paths"]
+    assert schema["info"]["title"]
+
+
 def test_la_carte_des_relations_agrege_par_interlocuteur():
     """Une machine peut ouvrir vingt connexions au meme service : la carte doit
     montrer UN interlocuteur, pas vingt traits superposes."""

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Documentation de l'API — Packet Analyzer{% endblock %}
+{% block heading %}Documentation de l'API{% endblock %}
+{% block subheading %}Les {{ total }} routes exposées par l'application, et comment les appeler.{% endblock %}
+
+{% block content %}
+
+<div class="callout callout--info">
+  <h3>Pourquoi cette page n'est pas le Swagger habituel</h3>
+  <p>
+    La documentation intégrée de FastAPI charge ses styles et son script depuis un
+    CDN. La politique de sécurité de cette application n'autorise que ses propres
+    ressources : la page s'affichait donc <strong>entièrement blanche</strong>.
+    Plutôt que d'assouplir la sécurité pour afficher une page, elle est
+    reproduite ici à partir du schéma de l'application.
+  </p>
+  <p>
+    Le schéma reste disponible pour les outils externes :
+    <a href="/api/openapi.json" target="_blank" rel="noopener" class="mono">/api/openapi.json</a>
+    — il s'ouvre dans Postman, Insomnia ou tout générateur de client.
+  </p>
+</div>
+
+<section class="toolbar">
+  <p class="toolbar-note">
+    Toutes les routes de lecture sont en <span class="mono">GET</span>.
+    Les routes de modification exigent l'en-tête
+    <span class="mono">X-CSRF-Token</span> et sont refusées en mode consultation.
+  </p>
+</section>
+
+{% for groupe in groupes %}
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">{{ groupe.titre }}</h2>
+    <span class="panel-hint">{{ groupe.routes|length }} route(s)</span>
+  </header>
+  <div class="api-routes">
+    {% for route in groupe.routes %}
+    <article class="api-route">
+      <div class="api-entete">
+        <span class="api-methode api-methode--{{ route.methode|lower }}">{{ route.methode }}</span>
+        <code class="api-chemin">{{ route.chemin }}</code>
+      </div>
+      <p class="api-resume">{{ route.resume }}</p>
+      {% if route.parametres %}
+      <dl class="api-params">
+        {% for parametre in route.parametres %}
+        <div class="api-param">
+          <dt><code>{{ parametre.nom }}</code>{% if parametre.obligatoire %} <span class="api-obligatoire">obligatoire</span>{% endif %}</dt>
+          <dd>{{ parametre.description }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+      {% endif %}
+      {% if route.exemple %}
+      <p class="api-exemple"><span class="api-exemple-titre">Essayer :</span>
+        <a href="{{ route.exemple }}" target="_blank" rel="noopener" class="mono">{{ route.exemple }}</a>
+      </p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{% endblock %}

@@ -60,7 +60,13 @@ def create_app(settings_object=None) -> FastAPI:
         ),
         version="1.0.0",
         lifespan=lifespan,
-        docs_url="/api/docs",
+        # La documentation integree de FastAPI (Swagger UI) charge ses feuilles de
+        # style et son script depuis un CDN. La politique de securite de
+        # l'application n'autorise que nos propres ressources : la page
+        # s'affichait donc ENTIEREMENT BLANCHE. On la remplace par une page
+        # maison, generee a partir du schema, servie par /api/docs (voir
+        # routes.py). Le schema reste expose pour les outils externes.
+        docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
     )

@@ -195,6 +195,75 @@ async def settings_page(request: Request):
     return templates.TemplateResponse(request, "settings.html", context)
 
 
+@router.get("/api/docs", response_class=HTMLResponse)
+async def api_docs(request: Request):
+    """Documentation de l'API, generee a partir du schema de l'application.
+
+    Elle remplace la documentation integree de FastAPI, dont les ressources
+    viennent d'un CDN : la politique de securite de l'application les bloque, et
+    la page s'affichait entierement blanche. On la reproduit ici plutot que
+    d'assouplir la securite pour afficher une page.
+    """
+    schema = request.app.openapi()
+    groupes: dict[str, list[dict]] = {}
+
+    for chemin, operations in sorted(schema.get("paths", {}).items()):
+        if not chemin.startswith("/api/"):
+            continue
+        for methode, operation in operations.items():
+            if methode.upper() not in ("GET", "POST"):
+                continue
+
+            parametres = []
+            for parametre in operation.get("parameters", []) or []:
+                parametres.append({
+                    "nom": parametre.get("name", ""),
+                    "obligatoire": bool(parametre.get("required")),
+                    "description": parametre.get("description")
+                                   or parametre.get("schema", {}).get("title", ""),
+                })
+
+            # Un exemple cliquable seulement s'il n'y a rien a renseigner : un
+            # lien qui repond une erreur ferait paraitre la route cassee.
+            exemple = None
+            if methode.upper() == "GET" and not any(p["obligatoire"] for p in parametres):
+                exemple = chemin
+
+            route = {
+                "methode": methode.upper(),
+                "chemin": chemin,
+                "resume": operation.get("summary") or operation.get("description", ""),
+                "parametres": parametres,
+                "exemple": exemple,
+            }
+            groupes.setdefault(_groupe_api(chemin, methode.upper()), []).append(route)
+
+    ordre = ("État et statistiques", "Données capturées", "Export de la capture",
+             "Référentiels et configuration", "Actions (modification)")
+    liste = [{"titre": titre, "routes": groupes[titre]}
+             for titre in ordre if titre in groupes]
+
+    context = base_context(request)
+    context["active"] = "api"
+    context["groupes"] = liste
+    context["total"] = sum(len(g["routes"]) for g in liste)
+    return templates.TemplateResponse(request, "api_docs.html", context)
+
+
+def _groupe_api(chemin: str, methode: str) -> str:
+    """Range une route dans le groupe qui correspond a ce qu'elle sert."""
+    if methode != "GET":
+        return "Actions (modification)"
+    if chemin.startswith("/api/export/"):
+        return "Export de la capture"
+    if chemin in ("/api/stats", "/api/status", "/api/dependencies", "/api/summary"):
+        return "État et statistiques"
+    if chemin in ("/api/protocols", "/api/filter/syntax", "/api/interfaces",
+                  "/api/settings"):
+        return "Référentiels et configuration"
+    return "Données capturées"
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about(request: Request):
     """Page de comprehension : elle explique le fonctionnement du systeme.

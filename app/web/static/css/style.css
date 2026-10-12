@@ -950,6 +950,29 @@ body.page-fill .content > .wireshark { flex: 1 1 auto; min-height: 0; }
 .menu-item[disabled] { opacity: .45; cursor: default; }
 .menu-note { font-size: 10.5px; color: var(--text-dim); }
 
+/* ---- documentation de l'API ---- */
+.api-routes { display: flex; flex-direction: column; gap: 10px; }
+.api-route { padding: 10px 12px; border: 1px solid var(--border);
+             border-radius: var(--radius); background: var(--bg); }
+.api-entete { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.api-methode {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  padding: 2px 7px; border-radius: 3px; background: var(--surface-2);
+  color: var(--text-dim);
+}
+.api-methode--get { background: rgba(79, 192, 112, .16); color: #6cd48d; }
+.api-methode--post { background: rgba(232, 180, 90, .16); color: #e8b45a; }
+.api-chemin { font-size: 12.5px; word-break: break-all; }
+.api-resume { margin: 6px 0 0; font-size: 12.5px; color: var(--text-dim);
+              line-height: 1.5; }
+.api-params { margin: 8px 0 0; display: flex; flex-direction: column; gap: 3px; }
+.api-param { display: flex; gap: 9px; font-size: 11.5px; }
+.api-param dt { flex: 0 0 auto; color: var(--text); }
+.api-param dd { margin: 0; color: var(--text-dim); }
+.api-obligatoire { font-size: 10px; color: #e8b45a; text-transform: uppercase; }
+.api-exemple { margin: 8px 0 0; font-size: 11.5px; }
+.api-exemple-titre { color: var(--text-dim); }
+
 /* ---- les trois volets ---- */
 .volet {
   display: flex;
