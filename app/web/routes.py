@@ -97,18 +97,6 @@ async def flows(request: Request):
     return templates.TemplateResponse(request, "flows.html", context)
 
 
-@router.get("/geolocation", response_class=HTMLResponse)
-async def geolocation(request: Request):
-    """Ou vont les donnees : origine geographique des adresses distantes.
-
-    Repond a une question que le tableau de paquets ne permet pas de se poser :
-    « vers quels pays mon ordinateur communique-t-il ? »
-    """
-    context = base_context(request)
-    context["active"] = "geolocation"
-    return templates.TemplateResponse(request, "geolocation.html", context)
-
-
 @router.get("/packet", response_class=HTMLResponse)
 async def packet_detail(request: Request, number: int = 0):
     """Vue detaillee d'un paquet : arbre des couches et contenu brut.

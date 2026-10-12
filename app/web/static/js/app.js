@@ -390,11 +390,20 @@
   function initSummaryAndServices() {
     var summaryText = $("#summary-text");
     if (summaryText) {
-      var loadSummary = function () {
-        summaryText.textContent = "Composition du résumé…";
+      /* Le resume est un instantane : ses chiffres datent de son calcul, alors
+         que les cartes au-dessus se rafraichissent en continu. Sans
+         rafraichissement, les deux finissaient par se contredire a l'ecran —
+         « 4850 paquets » en haut et « 4076 » dans le texte. On le recalcule donc
+         regulierement, sans afficher « Composition… » a chaque fois (le texte
+         sauterait pendant la lecture), et on affiche l'heure du calcul pour que
+         le lecteur sache de quand datent ces chiffres. */
+      var loadSummary = function (silencieux) {
+        if (!silencieux) summaryText.textContent = "Composition du résumé…";
         api("/api/summary").then(function (data) {
           var summary = data.summary || {};
-          $("#summary-source").textContent = "source : " + (summary.provider || "—");
+          var heure = new Date().toLocaleTimeString("fr-FR");
+          $("#summary-source").textContent =
+            "source : " + (summary.provider || "—") + " · calculé à " + heure;
           summaryText.textContent = summary.text || "";
 
           var guardrail = $("#summary-guardrail");
@@ -417,9 +426,10 @@
       };
 
       var button = $("#btn-summary");
-      if (button) button.addEventListener("click", loadSummary);
+      if (button) button.addEventListener("click", function () { loadSummary(false); });
       window.__pkaSummaryRefresh = loadSummary;
-      loadSummary();
+      loadSummary(false);
+      setInterval(function () { loadSummary(true); }, 5000);
     }
 
     var servicesBox = $("#services-state");
@@ -495,11 +505,17 @@
       if (!items.length) return h("p", { class: "empty", text: "Aucune donnée pour l'instant." });
       var max = Math.max.apply(null, items.map(function (i) { return i[countKey]; })) || 1;
       return items.map(function (item) {
+        /* La largeur est posee par le CSSOM et NON par un attribut style="...".
+           La politique de securite du serveur (style-src 'self') bloque les
+           attributs de style en ligne : les barres se retrouvaient sans largeur
+           et les graphiques du tableau de bord etaient casses. Le CSSOM n'est
+           pas concerne par cette restriction. */
+        var remplissage = h("div", { class: "bar-fill" });
+        remplissage.style.width = Math.max(3, (item[countKey] / max) * 100) + "%";
+
         return h("div", { class: "bar-row" }, [
           h("span", { class: "bar-label", text: item[labelKey], title: item[labelKey] }),
-          h("div", { class: "bar-track" }, h("div", {
-            class: "bar-fill", style: "width:" + Math.max(3, (item[countKey] / max) * 100) + "%"
-          })),
+          h("div", { class: "bar-track" }, remplissage),
           h("span", { class: "bar-value", text: String(item[countKey]) + (unitLabel || "") })
         ]);
       });
@@ -1347,62 +1363,7 @@
     replace(zone, morceaux);
   }
 
-  /* ------------------------------------------------------- 10. geolocalisation */
-
-  function initGeolocation() {
-    var corps = $("#geo-rows");
-    if (!corps) return;
-
-    function remplirBarres(selecteur, adresses, champ) {
-      var zone = $(selecteur);
-      if (!zone) return;
-      var compteurs = {};
-      adresses.forEach(function (adresse) {
-        var cle = adresse[champ];
-        if (!cle) return;
-        compteurs[cle] = (compteurs[cle] || 0) + (adresse.packets || 0);
-      });
-      var elements = Object.keys(compteurs).map(function (cle) {
-        return { name: cle, count: compteurs[cle] };
-      }).sort(function (a, b) { return b.count - a.count; }).slice(0, 8);
-
-      replace(zone, elements.length
-        ? barRows(elements, "name", "count", "")
-        : h("p", { class: "empty", text: "Aucune donnee pour l'instant." }));
-    }
-
-    function charger() {
-      api("/api/geolocation?limit=300").then(function (data) {
-        var toutes = data.addresses || [];
-        var connues = toutes.filter(function (adresse) { return !adresse.error; });
-
-        $("#geo-count").textContent = connues.length
-          ? connues.length + " adresse(s) distante(s) identifiee(s)"
-          : "Aucune adresse distante identifiee pour l'instant.";
-
-        replace(corps, connues.length ? connues.map(function (adresse) {
-          return h("tr", null, [
-            h("td", { class: "mono", text: adresse.ip || "—" }),
-            h("td", { text: adresse.country || "—" }),
-            h("td", { text: adresse.city || "—" }),
-            h("td", { class: "geo-org", text: orgText(adresse), title: orgTitle(adresse) }),
-            h("td", { class: "mono", text: adresse.asn ? fmtAsn(adresse.asn) : "—" }),
-            h("td", { class: "mono num", text: String(adresse.packets || 0) })
-          ]);
-        }) : emptyRow(6, "Aucune adresse distante identifiee pour l'instant."));
-
-        remplirBarres("#geo-countries", connues, "country");
-        remplirBarres("#geo-orgs", connues, "org");
-      }).catch(function (erreur) {
-        $("#geo-count").textContent = "Erreur : " + erreur.message;
-      });
-    }
-
-    charger();
-    setInterval(charger, REFRESH_MS * 4);
-  }
-
-  /* --------------------------------------------------------- 11. reseau local */
+  /* --------------------------------------------------------- 10. reseau local */
 
   function initNetwork() {
     var corpsAppareils = $("#net-devices");
@@ -1487,7 +1448,6 @@
     initHistory();
     initProtocols();
     initPacketDetail();
-    initGeolocation();
     initNetwork();
     initTheme();
   }

@@ -372,3 +372,30 @@ class TestScriptsEnLigne:
         assert 'data-packet-number="42"' in reponse.text
         assert "window.PACKET_NUMBER" not in reponse.text
 
+    def test_aucun_style_en_ligne_dans_les_gabarits(self):
+        fautifs = []
+        for gabarit in sorted(self.GABARITS.glob("*.html")):
+            contenu = gabarit.read_text(encoding="utf-8")
+            if re.search(r'\sstyle="', contenu):
+                fautifs.append(gabarit.name)
+        assert not fautifs, (
+            "Ces gabarits posent un attribut style=\"...\", bloque par la CSP "
+            "(style-src 'self' : " + ", ".join(fautifs) + ")"
+        )
+
+    def test_le_script_ne_pose_pas_d_attribut_style(self):
+        """Le CSSOM est autorise, l'attribut style ne l'est pas.
+
+        Les graphiques a barres posaient leur largeur par un attribut style :
+        la CSP le bloquait, les barres se retrouvaient sans largeur et le
+        tableau de bord paraissait vide. La largeur doit passer par
+        `element.style.propriete = valeur`.
+        """
+        source = (Path(__file__).resolve().parent.parent
+                  / "app" / "web" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        assert "style:" not in source, (
+            "app.js pose un attribut style dans une balise : utilisez le CSSOM "
+            "(element.style.propriete = valeur), sinon la CSP le bloque en silence."
+        )
+
+

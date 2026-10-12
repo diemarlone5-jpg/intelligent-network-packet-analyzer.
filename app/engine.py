@@ -431,20 +431,6 @@ class AnalyzerEngine:
         data["raw_available"] = bool(raw)
         return data
 
-    def geolocation_snapshot(self, limit: int = 200) -> list[dict]:
-        """Adresses distantes geolocalisees, les plus vues en premier."""
-        with self._lock:
-            compteurs = Counter(self._sources) + Counter(self._destinations)
-            cache = dict(self._intel)
-
-        resultats = []
-        for adresse, info in cache.items():
-            entree = dict(info)
-            entree["packets"] = compteurs.get(adresse, 0)
-            resultats.append(entree)
-        resultats.sort(key=lambda item: item.get("packets", 0), reverse=True)
-        return resultats[:limit]
-
     # ------------------------------------------------------------------
     def devices_snapshot(self) -> dict:
         """Appareils du reseau local et services qu'ils diffusent.
