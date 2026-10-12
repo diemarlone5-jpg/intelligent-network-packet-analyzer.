@@ -1145,6 +1145,34 @@
       }
     }
 
+    /* Combien de paquets l'export contient reellement.
+
+       Le moteur ne garde que les derniers octets bruts en memoire. Sans cette
+       mention, un utilisateur qui exporte 5 000 paquets sur une capture de
+       28 000 croit avoir tout emporte — et ne s'en apercevrait qu'en ouvrant le
+       fichier ailleurs. */
+    var noteExport = $("#export-note");
+    function majNoteExport() {
+      if (!noteExport) return;
+      api("/api/stats").then(function (data) {
+        var exportables = data.packets_exportable || 0;
+        var total = data.packets || 0;
+        if (total > exportables) {
+          noteExport.textContent = "Export : les " + exportables +
+            " derniers paquets sur " + total + " capturés";
+          noteExport.setAttribute("data-alerte", "oui");
+        } else if (exportables) {
+          noteExport.textContent = "Export : " + exportables + " paquets";
+          noteExport.removeAttribute("data-alerte");
+        } else {
+          noteExport.textContent = "";
+          noteExport.removeAttribute("data-alerte");
+        }
+      }).catch(function () { /* la note n'est pas essentielle */ });
+    }
+    majNoteExport();
+    setInterval(majNoteExport, REFRESH_MS);
+
     // La selection est exposee pour que packetTableRow puisse l'appeler depuis
     // n'importe quelle page.
     window.__pkaSelectPacket = selectionner;

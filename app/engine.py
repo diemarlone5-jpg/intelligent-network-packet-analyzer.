@@ -1009,6 +1009,12 @@ class AnalyzerEngine:
             "geo_known": len(self._intel),
             # Courbe de trafic : le tableau de bord la dessine telle quelle.
             "traffic_series": list(self._serie),
+            # Combien de paquets sont reellement exportables. Le moteur ne garde
+            # que les derniers octets bruts : un export qui porte sur 5 000
+            # paquets quand la capture en compte 28 000 doit le DIRE, sinon
+            # l'utilisateur croit avoir tout emporte.
+            "packets_exportable": len(self._raw),
+            "packets_buffer": self.settings.max_packets_buffer,
             # Repartition par taille et hierarchie par volume : calculees a partir
             # de compteurs incrementaux, pas en reparcourant la capture.
             "size_distribution": repartition_depuis_comptes(self._size_buckets),

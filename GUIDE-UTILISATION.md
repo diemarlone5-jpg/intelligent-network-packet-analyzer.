@@ -59,15 +59,38 @@ apparaissent en une à deux secondes.
 
 ## 3. Lire chaque page
 
+### La barre de menus
+
+En haut, cinq menus regroupent les actions **par intention** — « qu'est-ce que je
+veux faire ? » — alors que le menu de gauche les regroupe **par page**.
+
+| Menu | Ce qu'on y trouve |
+|---|---|
+| **Fichier** | ouvrir un `.pcap`, exporter en PCAP ou CSV, documentation de l'API |
+| **Capture** | démarrer, arrêter, vider |
+| **Analyse** | les pages de lecture du trafic |
+| **Statistiques** | activité, volumes, qui parle à qui |
+| **Aide** | comprendre l'application, paramètres |
+
+Les deux se complètent : on ne cherche pas « la page Protocoles » de la même
+façon qu'on cherche « voir ce qui occupe la bande passante ».
+
+---
+
 ### 3.1 Tableau de bord — « que se passe-t-il en ce moment ? »
 
 C'est la vue d'ensemble. Tu y trouves :
 
 - le **nombre de paquets**, de communications et d'événements ;
-- la **répartition par protocole** (TLS, DNS, TCP…) ;
-- les **ports les plus utilisés** ;
-- les **domaines les plus contactés** ;
-- les **derniers paquets** capturés.
+- la **courbe d'activité** : le débit seconde par seconde, sur les 5 dernières
+  minutes. Les pics se voient ;
+- la **répartition par taille de paquet** : des petites trames de signalisation,
+  ou de gros transferts ? Deux problèmes différents ;
+- **qui occupe le réseau** : la part de chaque protocole **en volume**, pas en
+  nombre de paquets. Un transfert de fichier peut être minoritaire en paquets et
+  majoritaire en octets ;
+- la **répartition par protocole**, les **ports les plus utilisés** ;
+- les **domaines les plus contactés** et les **derniers paquets** capturés.
 
 Commence toujours par ici : si quelque chose t'inquiète, tu sauras sur quelle
 page aller creuser.
@@ -78,6 +101,18 @@ page aller creuser.
 
 C'est la liste brute, celle qui ressemble à Wireshark. **Aucune interprétation
 ici : uniquement des faits observés.**
+
+#### L'écran est découpé en trois volets
+
+| Volet | Ce qu'il montre |
+|---|---|
+| **haut** | la liste des paquets |
+| **milieu** | les **couches** du paquet sélectionné, empilées |
+| **bas** | le **contenu brut** en hexadécimal et en caractères |
+
+**Clique une ligne : les trois volets se remplissent sans changer de page.**
+C'est exactement le fonctionnement de Wireshark. Les deux volets du bas restent
+repliés tant que tu n'as rien choisi — sinon ils prennent la place de la liste.
 
 | Colonne | Ce que ça veut dire |
 |---|---|
@@ -91,20 +126,34 @@ ici : uniquement des faits observés.**
 | **Organisation** | à qui appartient cette adresse (opérateur, hébergeur…) |
 | **Résumé** | description technique du paquet |
 
-**À savoir :**
-- les paquets les **plus récents sont en haut** ;
-- le **liseré de couleur** à gauche indique le protocole : bleu = DNS,
-  violet = TLS, vert = HTTP, orange = ICMP ;
-- **clique sur une ligne** pour ouvrir le détail complet du paquet
-  (couches empilées + contenu brut en hexadécimal) ;
-- **une adresse coupée par `…`** est juste trop longue pour la colonne — passe la
-  souris dessus pour voir la valeur complète.
+#### Le filtre d'affichage
 
-**Les filtres du haut :**
-- *Rechercher* : tape une adresse, un domaine ou `SYN` pour ne garder que les
-  lignes correspondantes ;
-- *Protocole* : n'affiche qu'un seul protocole ;
-- *Suivre les nouveaux* : fait défiler la liste automatiquement.
+La barre en haut accepte des expressions, comme Wireshark :
+
+| Expression | Ce qu'elle garde |
+|---|---|
+| `tcp` | tout le TCP (y compris TLS) |
+| `dns and size > 200` | le DNS de plus de 200 octets |
+| `ip.addr == 8.8.8.8` | tout ce qui concerne cette adresse |
+| `tcp.port == 443` | le port 443, en TCP seulement |
+| `not arp` | tout **sauf** ARP |
+| `contains "telegram"` | ce qui contient ce mot |
+
+Les opérateurs `and`, `or`, `not` et les parenthèses sont acceptés.
+
+**Point important** : si tu te trompes, l'outil te le dit et **garde ta liste à
+l'écran**. Une faute de frappe ne doit jamais passer pour « aucun paquet trouvé ».
+
+#### Ouvrir un fichier `.pcap`
+
+Le bouton **Ouvrir un .pcap** analyse une capture enregistrée **comme une
+capture en direct** : mêmes colonnes, mêmes filtres, mêmes explications. Pratique
+pour analyser un fichier venu d'ailleurs, ou pour rejouer une démonstration.
+
+#### Exporter
+
+- **PCAP** : fichier ouvrable dans Wireshark, pour comparer.
+- **CSV** : tableau ouvrable dans Excel.
 
 ---
 
@@ -134,6 +183,34 @@ Chaque colonne :
 | **Risque** | note de 0 à 100, jamais une accusation (voir §4) |
 
 Clique sur **Analyser** au bout d'une ligne pour l'explication complète.
+
+#### La carte des relations (en haut de la page)
+
+Le centre est **ta machine**. Chaque trait part vers un interlocuteur, et son
+**épaisseur suit le volume échangé** : un trait large, c'est une conversation
+volumineuse.
+
+Les interlocuteurs non dessinés sont **comptés et totalisés** en bas de la carte.
+Sans ce total, la carte laisserait croire qu'elle montre tout le trafic.
+
+> **Le centre est le seul point de vue que la capture permet de connaître.** On
+> ne voit pas le trafic des autres appareils du réseau : le chiffrement Wi-Fi et
+> les commutateurs s'y opposent. La carte le dit au lieu de laisser croire le
+> contraire.
+
+#### Suivre une conversation
+
+Sur la page d'analyse d'une communication, le bouton **Reconstituer l'échange**
+montre le contenu réellement échangé, sens par sens — c'est le *Follow TCP
+Stream* de Wireshark.
+
+Trois cas, et l'outil dit toujours dans lequel il se trouve :
+
+| Ce que tu vois | Ce que ça veut dire |
+|---|---|
+| du **texte lisible** | la conversation est en clair (HTTP, protocole texte) |
+| **« contenu chiffré »** | c'est du TLS : on voit *qui* parle, pas *ce qui est dit* |
+| **« octets manquants »** | la capture n'a pas vu tous les paquets — signalé, jamais comblé en silence |
 
 ---
 
@@ -170,14 +247,35 @@ deux, parce que confondre les deux inverserait la vérité.
 
 ---
 
-### 3.6 Géolocalisation — « vers quels pays ça parle ? »
+### 3.6 Comprendre et Paramètres — « comment ça marche, et où j'en suis »
 
-Toutes les adresses distantes identifiées, avec **pays, ville, organisation et
-numéro de réseau (ASN)**, les plus actives en tête.
+**Comprendre** explique le fonctionnement de l'outil lui-même : c'est le support
+direct de la soutenance.
 
-La colonne *Pays* situe **l'adresse déclarée** auprès des registres Internet —
-pas la position d'une personne. Une adresse peut appartenir à un hébergeur situé
-dans un autre pays que son utilisateur.
+**Paramètres** répond à trois questions :
+
+| Section | Ce qu'elle montre |
+|---|---|
+| Configuration en vigueur | mode, interface, base de données, enrichissement |
+| Services | ce qui répond et ce qui ne répond pas |
+| **Données conservées** | la taille de la base, et de quoi la réduire |
+
+**Aucun secret n'est affiché** : les clés apparaissent comme « fournie » ou
+« absente », jamais en clair. Une page de réglages ne doit pas devenir un moyen
+de lire les secrets d'une installation.
+
+#### La base grossit à chaque capture
+
+Une capture qui tourne enregistre les sessions, les communications et les
+paquets, et **rien n'est supprimé automatiquement**. Au bout de plusieurs heures,
+la base peut occuper plusieurs centaines de mégaoctets.
+
+La page Paramètres le signale et propose une purge : tu choisis **combien de
+sessions récentes garder**, et l'outil supprime les autres. L'option *Compacter*
+récupère ensuite l'espace disque — sans elle, supprimer des lignes ne réduit pas
+le fichier.
+
+**Rien n'est effacé sans que tu le demandes.**
 
 ---
 
