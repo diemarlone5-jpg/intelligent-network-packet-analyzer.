@@ -36,3 +36,14 @@ desktop.ini
 
 # Journaux d execution
 *.log
+
+# Fichiers de travail temporaires (verifications manuelles).
+# _j.txt contient un cookie de session : il ne doit jamais etre publie.
+_*.txt
+_*.html
+_*.json
+diag.pcap
+gh-login.log
+gcm-login.log
+server.log
+_frames/

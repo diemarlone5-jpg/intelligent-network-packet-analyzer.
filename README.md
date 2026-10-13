@@ -154,7 +154,7 @@ packet-analyzer/
 │   │                           composite_repo.py
 │   └── web/                    app.py, routes.py, api.py, templates/, static/
 ├── schema/supabase.sql         schéma PostgreSQL commenté
-├── tests/                      126 tests automatisés
+├── tests/                      347 tests automatisés
 ├── Dockerfile · render.yaml    déploiement
 └── .env.example                modèle de configuration
 ```
@@ -357,12 +357,28 @@ Un filtre de capture est disponible (syntaxe BPF) : `tcp port 443`,
 ### Tests automatisés
 
 ```bash
-python -m pytest -q          # 98 tests, aucune capture réseau requise
+python -m pytest -q          # 347 tests, aucune capture réseau requise
 python -m pytest -v          # détail par test
 ```
 
 Les paquets des tests sont **construits à la main** : la suite est donc
 reproductible sur une machine sans Npcap.
+
+### Vérifier qu'aucun secret n'a été commité
+
+```bash
+python outils/verifier-secrets.py
+```
+
+Le dépôt est **public** : un jeton commité est un jeton donné au monde entier,
+et le retirer plus tard ne suffit pas — il reste dans l'historique Git. Ce
+contrôle cherche des **formes** de secrets (JWT, clés préfixées), pas des mots :
+chercher le mot « service_role » ne remontait que des commentaires qui
+*expliquent* la règle de sécurité.
+
+Il tourne aussi automatiquement avec `pytest` (`tests/test_secrets.py`), y
+compris un test qui vérifie qu'il **détecte vraiment** un secret — un contrôle
+qui ne trouve jamais rien ne prouve rien.
 
 **Deux tests de non-régression** reproduisent des bugs réellement rencontrés :
 

@@ -1741,13 +1741,22 @@
     var dissection = paquet.dissection || {};
     var morceaux = [];
 
+    // Sur une adresse de traduction NAT64, cette page affiche l'adresse REELLE
+    // et rappelle entre parentheses celle qui a circule : c'est justement ici
+    // qu'on vient verifier le detail, donc on ne cache rien.
+    function adresseDeDetail(adresse, port, decodee) {
+      var texte = endpoint(decodee || adresse, port);
+      if (!decodee) return texte;
+      return texte + "   (adresse traduite — sur le fil : " + adresse + ")";
+    }
+
     var resume = [
       ["Numero", String(paquet.number)],
       ["Instant", fmtClock(paquet.ts)],
       ["Protocole", paquet.protocol || "?"],
       ["Taille", (paquet.size || 0) + " octets"],
-      ["Source", endpoint(paquet.src, paquet.src_port)],
-      ["Destination", endpoint(paquet.dst, paquet.dst_port)]
+      ["Source", adresseDeDetail(paquet.src, paquet.src_port, paquet.src_ipv4)],
+      ["Destination", adresseDeDetail(paquet.dst, paquet.dst_port, paquet.dst_ipv4)]
     ];
     if (paquet.domain) resume.push(["Nom de domaine", paquet.domain]);
     if (paquet.geo && !paquet.geo.error && paquet.geo.org) {
