@@ -154,7 +154,7 @@ packet-analyzer/
 │   │                           composite_repo.py
 │   └── web/                    app.py, routes.py, api.py, templates/, static/
 ├── schema/supabase.sql         schéma PostgreSQL commenté
-├── tests/                      347 tests automatisés
+├── tests/                      383 tests automatisés
 ├── Dockerfile · render.yaml    déploiement
 └── .env.example                modèle de configuration
 ```
@@ -357,7 +357,7 @@ Un filtre de capture est disponible (syntaxe BPF) : `tcp port 443`,
 ### Tests automatisés
 
 ```bash
-python -m pytest -q          # 347 tests, aucune capture réseau requise
+python -m pytest -q          # 383 tests, aucune capture réseau requise
 python -m pytest -v          # détail par test
 ```
 
