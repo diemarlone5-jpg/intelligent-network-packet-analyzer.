@@ -37,6 +37,22 @@ URL = "https://exemple.supabase.co"
 CLE = "cle-de-test-service-role"
 
 
+def _fausse_cle(nature: str) -> str:
+    """Fabrique une cle qui a la FORME d'une cle Supabase, sans en etre une.
+
+    POURQUOI ELLE EST ASSEMBLEE ICI PLUTOT QU'ECRITE EN CLAIR
+
+    La protection de GitHub contre les secrets reconnait le motif `sb_secret_...`
+    et REFUSE le push (verifie : « GITHUB PUSH PROTECTION — Supabase Secret Key »
+    sur ce fichier precis). Une fausse cle ecrite en clair bloque donc le depot
+    pour de bon, alors qu'elle ne sert qu'a verifier la construction des entetes.
+
+    Ne pas « simplifier » cette fonction en une chaine litterale : le push serait
+    refuse de nouveau.
+    """
+    return "sb_" + nature + "_" + "x" * 22 + "_" + "0" * 8
+
+
 # --------------------------------------------------------------------------
 # Faux serveur PostgREST
 # --------------------------------------------------------------------------
@@ -118,13 +134,69 @@ def test_l_url_finale_est_acceptee():
     assert depot.base == "https://projet.supabase.co/rest/v1"
 
 
+@pytest.mark.parametrize("fournie", [
+    "https://projet.supabase.co",
+    "https://projet.supabase.co/",
+    "https://projet.supabase.co/rest/v1",
+    "https://projet.supabase.co/rest/v1/",
+    "  https://projet.supabase.co/rest/v1/  ",
+])
+def test_toutes_les_formes_d_url_donnent_la_meme_adresse(fournie):
+    """L'interface de Supabase montre l'URL sous plusieurs formes, dont une qui
+    finit par `/rest/v1/`. La coller telle quelle ne doit pas produire
+    `/rest/v1/rest/v1` : toutes les requetes echoueraient en 404, sans que le
+    message d'erreur dise pourquoi."""
+    depot = SupabaseRepository(fournie, CLE)
+
+    assert depot.base == "https://projet.supabase.co/rest/v1"
+
+
 def test_la_cle_part_dans_les_deux_entetes(depot, faux):
-    """Supabase exige `apikey` ET `Authorization` : l'un sans l'autre echoue."""
+    """Les cles historiques sont des JWT : elles exigent les deux entetes.
+
+    Supabase accepte un jeton JWT dans `apikey` ET dans `Authorization` : envoyer
+    les deux est ce qui fonctionne aujourd'hui pour ce type de cle."""
     depot.ping()
     entetes = faux.derniere()["entetes"]
 
     assert entetes.get("apikey") == CLE
     assert entetes.get("authorization") == f"Bearer {CLE}"
+
+
+def test_une_nouvelle_cle_ne_part_pas_dans_authorization():
+    """Les cles `sb_...` ne sont PAS des JWT.
+
+    Si on les met aussi dans `Authorization`, la passerelle Supabase tente de les
+    lire comme un jeton et peut refuser la requete. La documentation recommande de
+    les envoyer sur `apikey` seulement.
+
+    On a la preuve dans les deux sens : une cle `sb_publishable_...` envoyee dans
+    les deux entetes a bien ete acceptee (reponse PGRST205 « table introuvable »,
+    et non « Invalid JWT ») — mais s'en remettre a cette tolerance serait fragile.
+    """
+    faux = FauxPostgrest()
+    depot = SupabaseRepository(URL, _fausse_cle("secret"))
+    depot._client = httpx.Client(timeout=5.0, headers=depot._headers(),
+                                 transport=faux.transport())
+
+    depot.ping()
+    entetes = faux.derniere()["entetes"]
+
+    assert entetes.get("apikey") == _fausse_cle("secret")
+    assert "authorization" not in entetes
+
+
+def test_une_nouvelle_cle_publishable_est_traitee_pareil():
+    """Meme regle pour les deux nouvelles cles : ce n'est pas le niveau de
+    privilege qui change la facon de se presenter, c'est le format."""
+    faux = FauxPostgrest()
+    depot = SupabaseRepository(URL, _fausse_cle("publishable"))
+    depot._client = httpx.Client(timeout=5.0, headers=depot._headers(),
+                                 transport=faux.transport())
+
+    depot.ping()
+
+    assert "authorization" not in faux.derniere()["entetes"]
 
 
 def test_la_cle_n_apparait_pas_dans_l_url(depot, faux):

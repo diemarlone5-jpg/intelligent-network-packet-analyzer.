@@ -31,6 +31,28 @@ TABLE_PACKETS = "packets"
 TABLE_INTEL = "ip_intel"
 
 
+def _adresse_rest(url: str) -> str:
+    """Adresse de l'API REST, quelle que soit la forme de l'URL fournie.
+
+    POURQUOI CETTE TOLERANCE
+
+    L'interface de Supabase affiche l'adresse du projet sous plusieurs formes
+    selon l'endroit ou l'on clique, et l'une d'elles finit par `/rest/v1/`. La
+    coller telle quelle avec un code qui rajoute `/rest/v1` produit une adresse
+    `/rest/v1/rest/v1` : toutes les requetes echouent en 404, avec un message qui
+    ne dit pas pourquoi.
+
+    On accepte donc les deux formes. Un utilisateur ne doit pas avoir a deviner
+    laquelle est la bonne.
+    """
+    adresse = url.strip().rstrip("/")
+    for suffixe in ("/rest/v1", "/rest"):
+        if adresse.endswith(suffixe):
+            adresse = adresse[: -len(suffixe)]
+            break
+    return adresse.rstrip("/") + "/rest/v1"
+
+
 class SupabaseRepository(Repository):
     """Implementation distante du contrat de stockage.
 
@@ -40,17 +62,29 @@ class SupabaseRepository(Repository):
     """
 
     def __init__(self, url: str, service_key: str) -> None:
-        self.base = url.rstrip("/") + "/rest/v1"
+        self.base = _adresse_rest(url)
         self.service_key = service_key
         self.last_error: str | None = None
         self._client = httpx.Client(timeout=12.0, headers=self._headers())
 
     def _headers(self, extra: dict | None = None) -> dict[str, str]:
-        headers = {
-            "apikey": self.service_key,
-            "Authorization": f"Bearer {self.service_key}",
-            "Content-Type": "application/json",
-        }
+        """Entetes d'authentification.
+
+        Supabase a deux generations de cles, et elles ne se presentent pas de la
+        meme facon :
+
+        - les cles historiques sont des JWT : elles exigent `apikey` ET
+          `Authorization: Bearer` ;
+        - les nouvelles cles `sb_publishable_...` / `sb_secret_...` ne sont PAS
+          des jetons. Si on les met aussi dans `Authorization`, la passerelle
+          tente de les lire comme un JWT et peut refuser la requete.
+
+        On n'envoie donc le second entete que lorsqu'il a un sens : c'est ce que
+        recommande la documentation Supabase pour les nouvelles cles.
+        """
+        headers = {"apikey": self.service_key, "Content-Type": "application/json"}
+        if not self.service_key.startswith("sb_"):
+            headers["Authorization"] = f"Bearer {self.service_key}"
         if extra:
             headers.update(extra)
         return headers

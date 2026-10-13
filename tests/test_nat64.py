@@ -13,9 +13,38 @@ les deux bords — ce qu'on decode, et ce qu'on refuse de decoder.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
+from app.analysis import protocols
 from app.analysis.protocols import embedded_ipv4
+
+
+@pytest.fixture
+def prefixes_fixes(monkeypatch):
+    """Fixe les prefixes de traduction connus, pour ne dependre d'aucun reseau.
+
+    POURQUOI CE GARDE-FOU
+
+    `64:ff9c::/96` n'est pas un prefixe normalise : il est DECOUVERT sur le
+    reseau de la machine (RFC 7050, interrogation de `ipv4only.arpa`). Un test
+    qui s'y fie passe sur une machine dont l'operateur traduit les adresses, et
+    echoue partout ailleurs.
+
+    C'est exactement ce qui est arrive : ces tests passaient sur ce PC et ont
+    echoue des que la decouverte a rendu autre chose. Un test qui depend du
+    reseau sur lequel il tourne ne prouve rien — il decrit une machine.
+
+    Le prefixe bien connu (64:ff9b::/96) reste teste sans ce garde-fou : lui est
+    ecrit en dur dans le code, il ne depend de rien.
+    """
+    monkeypatch.setattr(protocols, "_NAT64_CACHE", {
+        "prefixes": ("64:ff9b::/96", "64:ff9c::/96"),
+        "done": True,
+        "checked_at": time.time(),
+    })
+    yield
 
 
 # --------------------------------------------------------------------------
@@ -26,15 +55,40 @@ from app.analysis.protocols import embedded_ipv4
     "adresse, attendu",
     [
         # Prefixe NAT64 normalise (RFC 6052). Les 32 derniers bits sont l'IPv4.
+        # Il est ecrit en dur dans le code : ce test ne depend d'aucun reseau.
         ("64:ff9b::3ad:153f", "3.173.21.63"),
         ("64:ff9b::808:808", "8.8.8.8"),
         ("64:ff9b::c0a8:0101", "192.168.1.1"),
-        # Prefixe decouvert sur le reseau de l'utilisateur (RFC 7050).
-        ("64:ff9c::3ad:153f", "3.173.21.63"),
     ],
 )
 def test_decode_le_prefixe_nat64(adresse, attendu):
     assert embedded_ipv4(adresse) == attendu
+
+
+def test_decode_le_prefixe_propre_a_l_operateur(prefixes_fixes):
+    """Le prefixe propre a l'operateur est decouvert sur le reseau.
+
+    Il change d'une machine a l'autre : le test fixe donc la decouverte au lieu
+    d'attendre qu'elle reussisse.
+    """
+    assert embedded_ipv4("64:ff9c::3ad:153f") == "3.173.21.63"
+
+
+def test_sans_decouverte_le_prefixe_propre_n_est_pas_decode(monkeypatch):
+    """Ce que l'outil sait faire quand la decouverte n'a rien donne.
+
+    On documente la limite plutot que de la cacher : sans interrogation DNS
+    reussie, seul le prefixe bien connu est reconnu. Sur un reseau qui n'utilise
+    que son prefixe propre, la majorite du trafic resterait illisible.
+    """
+    monkeypatch.setattr(protocols, "_NAT64_CACHE", {
+        "prefixes": (), "done": False, "checked_at": 0.0,
+    })
+    monkeypatch.setattr(protocols, "_nat64_query", lambda: (), raising=False)
+
+    assert embedded_ipv4("64:ff9c::3ad:153f") is None
+    # Le prefixe normalise, lui, reste reconnu : il ne depend pas du reseau.
+    assert embedded_ipv4("64:ff9b::3ad:153f") == "3.173.21.63"
 
 
 def test_decode_une_adresse_ipv4_mappee():
@@ -105,7 +159,7 @@ def moteur(tmp_path):
     return AnalyzerEngine(reglages, build_repository(reglages), None)
 
 
-def test_le_moteur_enrichit_l_adresse_ipv4_cachee(moteur):
+def test_le_moteur_enrichit_l_adresse_ipv4_cachee(moteur, prefixes_fixes):
     """Sur une traduction NAT64, l'enrichissement doit viser l'IPv4 reelle.
 
     Interroger la forme IPv6 ne renverrait rien : l'utilisateur ne verrait ni
@@ -137,7 +191,7 @@ def test_le_moteur_ne_choisit_rien_sur_un_echange_local(moteur):
     assert moteur._counterparty(_faux_paquet(depart, arrivee)) is None
 
 
-def test_la_vue_du_paquet_expose_les_deux_adresses(moteur):
+def test_la_vue_du_paquet_expose_les_deux_adresses(moteur, prefixes_fixes):
     """L'interface a besoin de la forme d'origine ET de la forme decodee."""
     vue = moteur._packet_view(_faux_paquet("192.168.1.32", "64:ff9c::3ad:153f"))
 
