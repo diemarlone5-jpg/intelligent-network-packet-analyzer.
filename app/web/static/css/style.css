@@ -601,18 +601,18 @@ code, .mono {
   text-overflow: ellipsis;
 }
 
-/* Colonne de pays : les noms courts doivent tenir sur une ligne. */
-.table td.pays {
-  max-width: 110px;
+/* Colonne « organisation » de la table des paquets. Elle a récupéré la place
+   de l'ancienne colonne « pays », retirée : elle peut donc être plus large. */
+.table td.org {
+  max-width: 190px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Colonne d'organisation : elle ne doit pas elargir le tableau a l'infini
-   quand un nom d'operateur est long. */
-.table td.geo-org,
-.table td.org {
+/* Une adresse dont l'organisation n'est pas connue ne doit pas elargir le
+   tableau a l'infini quand le nom est long. */
+.table td.geo-org {
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;

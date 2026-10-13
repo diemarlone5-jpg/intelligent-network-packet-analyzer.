@@ -241,16 +241,6 @@
     return connus.indexOf(cle) >= 0 ? "pkt--" + cle : "";
   }
 
-  /* Une adresse dont la geographie n'est pas encore connue affiche un tiret.
-     C'est different d'une adresse sans pays : on ne confond pas les deux. */
-  function geoText(record, champ) {
-    var geo = record.geo;
-    if (!geo || geo.error) return "—";
-    var valeur = geo[champ];
-    if (valeur === null || valeur === undefined || valeur === "") return "—";
-    return String(valeur);
-  }
-
   function ouvrirPaquet(numero) {
     // Sur la page Paquets, cliquer sur une ligne SELECTIONNE le paquet et
     // remplit les deux volets du bas, sans quitter la page : c'est le
@@ -320,7 +310,6 @@
       endpointCell(record.dst, record.dst_port),
       h("td", null, badgeFor(record.protocol)),
       h("td", { class: "mono num", text: (record.size || 0) + " o" }),
-      h("td", { class: "mono pays", text: geoText(record, "country") }),
       h("td", { class: "org", text: orgText(record.geo), title: orgTitle(record.geo) }),
       h("td", { class: "summary-cell", text: record.info || "", title: record.info || "" })
     ]);
@@ -1310,8 +1299,6 @@
       }
       replace(box, h("dl", { class: "kv" }, [
         kvRow("Portée", intel.scope),
-        kvRow("Pays", intel.country),
-        kvRow("Ville", intel.city),
         kvRow("Opérateur", intel.isp || intel.org),
         kvRow("Système autonome", intel.asn),
         kvRow("Nom DNS inverse", intel.reverse_dns),
@@ -1750,10 +1737,11 @@
       ["Destination", endpoint(paquet.dst, paquet.dst_port)]
     ];
     if (paquet.domain) resume.push(["Nom de domaine", paquet.domain]);
-    if (paquet.geo && !paquet.geo.error) {
-      resume.push(["Pays (source externe)",
-                   (paquet.geo.country || "—") + (paquet.geo.city ? " · " + paquet.geo.city : "")]);
-      if (paquet.geo.org) resume.push(["Organisation", paquet.geo.org]);
+    if (paquet.geo && !paquet.geo.error && paquet.geo.org) {
+      // On ne garde que l'organisation : elle dit A QUI appartient l'adresse
+      // (Telegram, Google…). Le pays et la ville de l'adresse ne disent rien de
+      // la personne ni du service, et encombraient la lecture.
+      resume.push(["Organisation", paquet.geo.org]);
     }
 
     var enfants = [];

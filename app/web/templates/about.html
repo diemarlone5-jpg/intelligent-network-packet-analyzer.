@@ -29,7 +29,7 @@
     <li><strong>Comprendre</strong> — les ports, protocoles et drapeaux sont confrontés à une base de connaissance.</li>
     <li><strong>Expliquer</strong> — un texte humain est produit, séparant faits, interprétations et réserves.</li>
     <li><strong>Détecter</strong> — des règles comptent les comportements qui méritent l'attention.</li>
-    <li><strong>Enrichir</strong> — une API externe ajoute le pays, l'opérateur et le réseau d'une adresse.</li>
+    <li><strong>Enrichir</strong> — une API externe dit à quelle organisation appartient une adresse distante.</li>
     <li><strong>Conserver</strong> — SQLite en local, Supabase en ligne, pour rejouer une analyse plus tard.</li>
   </ol>
 </section>
@@ -65,8 +65,8 @@
     <div class="kv-row"><dt>Service retenu</dt><dd><strong>ipwho.is</strong>, avec <strong>ip-api.com</strong> en secours</dd></div>
     <div class="kv-row"><dt>Pourquoi</dt><dd>HTTPS natif, aucune clé d'API requise, réponse JSON exploitable, quota suffisant.</dd></div>
     <div class="kv-row"><dt>Ce que nous envoyons</dt><dd>Uniquement l'adresse IP distante déjà observée. Jamais le contenu d'un paquet.</dd></div>
-    <div class="kv-row"><dt>Ce que nous recevons</dt><dd>Pays, ville, opérateur, organisation, numéro de système autonome.</dd></div>
-    <div class="kv-row"><dt>Ce que nous en faisons</dt><dd>Ces éléments sont ajoutés aux <em>faits</em> et marqués comme provenant d'une source externe. Ils ne servent jamais à déduire une intention : le pays d'une adresse ne prouve rien.</dd></div>
+    <div class="kv-row"><dt>Ce que nous recevons</dt><dd>L'opérateur, l'organisation et le numéro de système autonome d'une adresse.</dd></div>
+    <div class="kv-row"><dt>Ce que nous en faisons</dt><dd>Cela répond à « à qui est cette adresse ? » — Telegram, Google, Cloudflare. C'est un <em>fait</em> marqué comme venant d'une source externe. Le pays renvoyé par cette source n'est pas affiché : c'est celui du siège de l'organisation, pas la position d'une personne, et il induit en erreur.</dd></div>
     <div class="kv-row"><dt>Adresses privées</dt><dd>Aucun appel externe : leur nature est déterminée localement.</dd></div>
   </dl>
 </section>
