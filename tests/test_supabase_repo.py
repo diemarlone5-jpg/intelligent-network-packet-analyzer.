@@ -280,6 +280,32 @@ def test_une_mise_a_jour_remplace_au_lieu_de_dupliquer(depot, faux):
     assert "merge-duplicates" in faux.derniere()["entetes"].get("prefer", "")
 
 
+def test_la_fusion_precise_la_contrainte_concernee(depot, faux):
+    """`merge-duplicates` seul ne suffit pas.
+
+    Sans `on_conflict`, PostgREST fusionne sur la CLE PRIMAIRE. Nos tables ont un
+    identifiant technique qui ne rentre jamais en conflit, et une AUTRE
+    contrainte d'unicite — `(session_id, flow_key)` — qui conflit a chaque
+    renvoi. Verifie en direct : sans ce parametre, Supabase repond HTTP 409
+    « duplicate key value violates unique constraint » des le deuxieme envoi.
+    """
+    faux.servir(201, [])
+    depot.save_flows(7, [Flow(key="k", src="a", dst="b", src_port=1, dst_port=2,
+                              transport="TCP", first_seen=0.0, last_seen=1.0)])
+
+    assert faux.derniere()["params"].get("on_conflict") == "session_id,flow_key"
+
+
+def test_une_ecriture_simple_ne_precise_pas_de_fusion(depot, faux):
+    """Les paquets et les evenements sont inseres, jamais fusionnes : ajouter
+    `on_conflict` sans motif les rendrait ecrasables."""
+    faux.servir(201, [])
+    depot.save_packets(7, [PacketRecord(number=1, ts=0.0, src="a", dst="b",
+                                        protocol="TCP", size=74)])
+
+    assert "on_conflict" not in faux.derniere()["params"]
+
+
 def test_les_octets_non_texte_ne_font_pas_echouer_l_ecriture(depot, faux):
     """Un paquet peut contenir des octets bruts : la serialisation doit tenir."""
     faux.servir(201, [])

@@ -27,6 +27,31 @@ class CompositeRepository(Repository):
         self.remote = remote
         self.remote_available = True
         self.last_error: str | None = None
+        # Correspondance identifiant LOCAL -> identifiant DISTANT.
+        #
+        # Les deux bases numerotent leurs lignes independamment : la 45e session
+        # locale peut tres bien etre la 2e en ligne, surtout apres avoir vide la
+        # base distante ou teste plusieurs fois. Le moteur, lui, ne connait que
+        # l'identifiant local et s'en sert pour tout ecrire.
+        #
+        # Sans cette table, chaque ecriture partait avec l'identifiant local :
+        # la cle etrangere ne correspondait a aucune session distante, et
+        # Supabase refusait en HTTP 409. Aucune erreur ne remontait a l'ecran —
+        # les tables distantes restaient simplement vides, ce qui est le pire
+        # des cas pour une demonstration.
+        self._sessions_distantes: dict[int, int] = {}
+
+    def _id_distant(self, session_id: int | None) -> int | None:
+        """Traduit un identifiant local en identifiant distant.
+
+        On ne traduit que les ECRITURES. En lecture, l'identifiant vient de
+        `list_sessions()`, qui renvoie deja les sessions distantes quand elles
+        sont joignables : c'est donc deja un identifiant distant, et le traduire
+        une seconde fois viserait la mauvaise session.
+        """
+        if session_id is None:
+            return None
+        return self._sessions_distantes.get(session_id, session_id)
 
     # ------------------------------------------------------------------
     def _try_remote(self, action, *args, **kwargs):
@@ -71,13 +96,21 @@ class CompositeRepository(Repository):
 
     # ------------------------------------------------------------------
     def create_session(self, **kwargs) -> int:
+        """Cree la session des deux cotes et retient la correspondance.
+
+        On rend l'identifiant LOCAL : c'est celui que le moteur utilisera partout
+        ensuite. L'identifiant distant est conserve a part, pour traduire les
+        ecritures (voir `_id_distant`).
+        """
         session_id = self.local.create_session(**kwargs)
-        self._try_remote(self.remote.create_session, **kwargs)
+        distant = self._try_remote(self.remote.create_session, **kwargs)
+        if isinstance(distant, int) and distant != session_id:
+            self._sessions_distantes[session_id] = distant
         return session_id
 
     def close_session(self, session_id: int, **kwargs) -> None:
         self.local.close_session(session_id, **kwargs)
-        self._try_remote(self.remote.close_session, session_id, **kwargs)
+        self._try_remote(self.remote.close_session, self._id_distant(session_id), **kwargs)
 
     def list_sessions(self, limit: int = 50) -> list[dict]:
         self._recheck_remote()
@@ -97,7 +130,7 @@ class CompositeRepository(Repository):
     # ------------------------------------------------------------------
     def save_flows(self, session_id: int, flows: list[Flow]) -> None:
         self.local.save_flows(session_id, flows)
-        self._try_remote(self.remote.save_flows, session_id, flows)
+        self._try_remote(self.remote.save_flows, self._id_distant(session_id), flows)
 
     def list_flows(self, session_id: int | None = None, limit: int = 500) -> list[dict]:
         self._recheck_remote()
@@ -106,7 +139,7 @@ class CompositeRepository(Repository):
 
     def save_events(self, session_id: int, events: list[Event]) -> None:
         self.local.save_events(session_id, events)
-        self._try_remote(self.remote.save_events, session_id, events)
+        self._try_remote(self.remote.save_events, self._id_distant(session_id), events)
 
     def list_events(self, session_id: int | None = None, limit: int = 300) -> list[dict]:
         self._recheck_remote()
@@ -115,7 +148,7 @@ class CompositeRepository(Repository):
 
     def save_packets(self, session_id: int, records: list[PacketRecord]) -> None:
         self.local.save_packets(session_id, records)
-        self._try_remote(self.remote.save_packets, session_id, records)
+        self._try_remote(self.remote.save_packets, self._id_distant(session_id), records)
 
     def list_packets(self, session_id: int | None = None, limit: int = 200) -> list[dict]:
         self._recheck_remote()

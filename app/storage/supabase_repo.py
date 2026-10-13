@@ -102,14 +102,32 @@ class SupabaseRepository(Repository):
             return None
 
     def _insert(self, table: str, rows: list[dict], upsert_on: str | None = None) -> bool:
+        """Ecrit des lignes. Avec `upsert_on`, remplace au lieu de dupliquer.
+
+        POURQUOI `on_conflict` EST OBLIGATOIRE
+
+        `Prefer: resolution=merge-duplicates` ne suffit pas : sans autre
+        precision, PostgREST fusionne sur la CLE PRIMAIRE. Or nos tables ont un
+        identifiant technique (`id`) qui ne rentre jamais en conflit, et une
+        AUTRE contrainte d'unicite qui, elle, conflit a chaque renvoi — par
+        exemple `(session_id, flow_key)` pour les communications.
+
+        Resultat sans ce parametre : la des deuxieme envoi, Supabase repond
+        HTTP 409 « duplicate key value violates unique constraint ». Les
+        communications etaient donc ecrites une fois puis plus jamais mises a
+        jour, alors que le moteur les renvoie toutes les 5 secondes.
+        """
         if not rows:
             return True
         headers = {"Prefer": "return=minimal"}
+        params: dict | None = None
         if upsert_on:
             headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+            params = {"on_conflict": upsert_on}
         try:
             response = self._client.post(
                 f"{self.base}/{table}",
+                params=params or {},
                 content=json.dumps(rows, default=str),
                 headers=self._headers(headers),
             )
