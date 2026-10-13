@@ -155,6 +155,31 @@ pour analyser un fichier venu d'ailleurs, ou pour rejouer une démonstration.
 - **PCAP** : fichier ouvrable dans Wireshark, pour comparer.
 - **CSV** : tableau ouvrable dans Excel.
 
+#### Les adresses soulignées en pointillé
+
+Un téléphone qui n'a pas d'adresse IPv4 à lui passe par une **traduction d'adresse**
+(NAT64) : le paquet ne contient pas « 3.173.21.63 », il contient
+`64:ff9b::3ad:153f`. Sur un réseau mobile, c'est la **majorité** du trafic.
+
+L'outil affiche donc directement l'adresse **réelle** :
+
+```
+64:ff9b::3ad:153f:443   →   affiché :  3.173.21.63:443
+```
+
+Le **soulignement pointillé** signale cette transformation : le texte affiché
+n'est pas celui qui a circulé sur le fil. Passe la souris dessus pour voir
+l'adresse d'origine, telle qu'elle était dans le paquet.
+
+Sans ce décodage, l'outil ne pourrait afficher **aucune organisation** sur ce
+trafic : la forme IPv6 n'appartient à personne, donc rien à interroger. Avec lui,
+une ligne qui affichait « — » affiche « Amazon », « GitHub » ou « Microsoft ».
+
+**Ce que l'outil refuse de décoder** : les autres formes de traduction (6to4,
+Teredo) placent l'adresse ailleurs, parfois en la brouillant. L'outil s'abstient
+plutôt que d'afficher une adresse fausse — une adresse fausse serait pire que
+pas d'adresse du tout.
+
 ---
 
 ### 3.3 Communications — « le sens de ce qui se passe »

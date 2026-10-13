@@ -721,6 +721,50 @@ def is_translation_prefix(ip: str | None) -> bool:
     return False
 
 
+def embedded_ipv4(ip: str | None) -> str | None:
+    """Adresse IPv4 cachee dans une adresse NAT64, ou None.
+
+    POURQUOI CE DECODAGE
+
+    Un telephone sur un reseau sans IPv4 native n'ecrit pas « 3.173.21.63 » dans
+    ses paquets : l'operateur traduit l'adresse, et la capture montre
+    « 64:ff9c::3ad:153f ». Sans decodage, l'utilisateur lit une adresse IPv6
+    incomprehensible et ne peut relier son propre trafic a aucun service.
+
+    Decoder cette adresse est donc la difference entre « je ne comprends rien »
+    et « je parlais a Amazon ».
+
+    CE QU'ON DECODE, ET CE QU'ON REFUSE DE DECODER
+
+    RFC 6052 : pour un prefixe de 96 bits, les 32 derniers bits SONT l'adresse
+    IPv4, sans decalage. C'est le cas de 64:ff9b::/96 et des prefixes decouverts
+    sur le reseau (RFC 7050) — les seuls qu'on traite.
+
+    Les autres prefixes de la liste (6to4, Teredo, NAT64 local /48) placent
+    l'adresse ailleurs, parfois en la brouillant. On s'abstient : afficher une
+    adresse fausse serait pire que de n'en afficher aucune.
+    """
+    if not ip or ":" not in ip:
+        return None
+
+    try:
+        adresse = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+
+    for reseau in (*TRANSLATION_NETWORKS, *discover_nat64_prefixes()):
+        try:
+            bloc = ipaddress.ip_network(reseau)
+        except ValueError:
+            continue
+        # Seuls les prefixes de 96 bits placent l'IPv4 sur les 32 derniers bits.
+        if bloc.prefixlen != 96:
+            continue
+        if adresse in bloc:
+            return str(ipaddress.IPv4Address(int(adresse) & 0xFFFFFFFF))
+    return None
+
+
 def is_broadcast(ip: str | None) -> bool:
     """L'adresse est-elle une adresse de diffusion ?
 

@@ -352,16 +352,27 @@ class AnalyzerEngine:
     def _counterparty(self, record: PacketRecord) -> str | None:
         """Adresse de l'interlocuteur : celle qui n'est pas la machine locale.
 
-        C'est celle qui a du sens a geolocaliser. Pour un echange purement
-        local, il n'y en a pas.
+        C'est celle qui a du sens a enrichir. Pour un echange purement local, il
+        n'y en a pas.
+
+        Quand cette adresse est une TRADUCTION NAT64 — le cas de tout telephone
+        sans IPv4 native — on rend l'adresse IPv4 qu'elle transporte. C'est elle
+        qui identifie reellement le service contacte : interroger la forme IPv6
+        ne renverrait rien, et l'utilisateur ne verrait ni organisation ni
+        operateur sur une grande partie de son propre trafic.
         """
+        from app.analysis.protocols import embedded_ipv4
+
         src_local = self.parser.is_local(record.src)
         dst_local = self.parser.is_local(record.dst)
         if src_local and not dst_local:
-            return record.dst
-        if dst_local and not src_local:
-            return record.src
-        return None
+            adresse = record.dst
+        elif dst_local and not src_local:
+            adresse = record.src
+        else:
+            return None
+
+        return embedded_ipv4(adresse) or adresse
 
     def _queue_geolocation(self, record: PacketRecord) -> None:
         """Met en file l'adresse distante a enrichir, si utile et pas deja connue."""
@@ -823,11 +834,23 @@ class AnalyzerEngine:
 
     def _packet_view(self, record: PacketRecord) -> dict:
         """Vue enrichie d'un paquet : la geographie de l'interlocuteur y est
-        jointe depuis le cache local, sans aucun appel reseau."""
+        jointe depuis le cache local, sans aucun appel reseau.
+
+        On y decode aussi les adresses de traduction NAT64 : un telephone sans
+        IPv4 native contacte « 3.173.21.63 », mais la capture montre
+        « 64:ff9c::3ad:153f ». Sans ce decodage, l'utilisateur lit une adresse
+        IPv6 incomprehensible et ne peut relier son trafic a aucun service.
+        """
+        from app.analysis.protocols import embedded_ipv4
+
         data = record.to_dict()
         adresse = self._counterparty(record)
         data["geo_ip"] = adresse
         data["geo"] = self._intel.get(adresse) if adresse else None
+        # Renseigne seulement quand l'adresse est bien une traduction : sinon on
+        # laisse None, et l'interface n'affiche rien.
+        data["src_ipv4"] = embedded_ipv4(record.src)
+        data["dst_ipv4"] = embedded_ipv4(record.dst)
         return data
 
     def packet_detail(self, number: int) -> dict | None:

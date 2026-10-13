@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="GvWwT7tlt3ADijg1BmeO5dfnt6mzyewMCSqfti4HDi4">
+  <title>Tableau de bord — Packet Analyzer</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=1791878940">
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="">
+<a class="skip-link" href="#contenu">Aller au contenu principal</a>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28">
+          <circle cx="6" cy="16" r="3"></circle>
+          <circle cx="26" cy="8" r="3"></circle>
+          <circle cx="26" cy="24" r="3"></circle>
+          <line x1="9" y1="15" x2="23" y2="9"></line>
+          <line x1="9" y1="17" x2="23" y2="23"></line>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <strong>Packet Analyzer</strong>
+        <small>capturer &middot; analyser &middot; expliquer</small>
+      </span>
+    </a>
+
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/" class="nav-item is-active">
+        <span class="nav-icon" aria-hidden="true">▤</span> Tableau de bord
+      </a>
+      <a href="/packets" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">≣</span> Paquets
+      </a>
+      <a href="/flows" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⇄</span> Communications
+      </a>
+      <a href="/network" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⛁</span> Réseau local
+      </a>
+      <a href="/events" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⚑</span> Événements
+      </a>
+      <a href="/protocols" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⚙</span> Protocoles
+      </a>
+      <a href="/history" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⟲</span> Historique
+      </a>
+      <a href="/about" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">?</span> Comprendre
+      </a>
+      <a href="/settings" class="nav-item ">
+        <span class="nav-icon" aria-hidden="true">⚙</span> Paramètres
+      </a>
+      <a href="/api/docs" class="nav-item nav-item--muted" target="_blank" rel="noopener">
+        <span class="nav-icon" aria-hidden="true">↗</span> API
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="mode-chip mode-chip--local">
+        Mode local — capture disponible
+      </div>
+      <p class="sidebar-note">
+        Chaque conclusion est séparée en <strong>fait observé</strong> et
+        <strong>interprétation</strong>.
+      </p>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <!-- Barre de menus : elle regroupe les actions par INTENTION (que veut-on
+         faire ?), alors que le menu lateral les regroupe par PAGE. Les deux ne
+         se remplacent pas : on ne cherche pas « la page Protocoles » de la meme
+         facon qu'on cherche « voir ce qui occupe la bande passante ». -->
+    <nav class="menubar" id="menubar" aria-label="Menu principal">
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Fichier</button>
+        <div class="menu-liste" role="group">
+          <button class="menu-item" type="button" data-menu-action="open-pcap">Ouvrir un fichier <span class="mono">.pcap</span>…</button>
+          <a class="menu-item" href="/api/export/packets.pcap" download>Exporter en PCAP <span class="menu-note">ouvrable dans Wireshark</span></a>
+          <a class="menu-item" href="/api/export/packets.csv" download>Exporter en CSV <span class="menu-note">paquets et communications</span></a>
+          <a class="menu-item" href="/api/docs" target="_blank" rel="noopener">Documentation de l'API</a>
+        </div>
+      </div>
+
+      
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Capture</button>
+        <div class="menu-liste" role="group">
+          <button class="menu-item" type="button" data-menu-action="capture-start">Démarrer la capture</button>
+          <button class="menu-item" type="button" data-menu-action="capture-stop">Arrêter la capture</button>
+          <button class="menu-item" type="button" data-menu-action="capture-clear">Vider les paquets</button>
+        </div>
+      </div>
+      
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Analyse</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/packets">Liste des paquets</a>
+          <a class="menu-item" href="/flows">Communications</a>
+          <a class="menu-item" href="/network">Réseau local</a>
+          <a class="menu-item" href="/events">Événements détectés</a>
+        </div>
+      </div>
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Statistiques</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/">Activité et volumes</a>
+          <a class="menu-item" href="/flows">Qui parle à qui</a>
+          <a class="menu-item" href="/protocols">Référentiel des protocoles</a>
+          <a class="menu-item" href="/history">Historique des sessions</a>
+        </div>
+      </div>
+
+      <div class="menu" data-menu>
+        <button class="menu-titre" type="button" aria-expanded="false" aria-haspopup="true">Aide</button>
+        <div class="menu-liste" role="group">
+          <a class="menu-item" href="/about">Comprendre l'application</a>
+          <a class="menu-item" href="/settings">Paramètres et état des services</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">Tableau de bord</h1>
+        <p class="page-sub">Vue d'ensemble du trafic observé et des événements détectés.</p>
+      </div>
+
+      <div class="topbar-right">
+        <button id="theme-toggle" class="btn btn--ghost btn--small" type="button"
+                aria-pressed="false" aria-label="Basculer entre thème sombre et clair"
+                title="Basculer le thème">◐</button>
+
+        <span class="status-pill" id="capture-status" data-state="idle">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="capture-status-text">Capture arrêtée</span>
+        </span>
+
+        
+        <div class="control-group">
+          <label class="visually-hidden" for="iface-select">Interface réseau</label>
+          <select id="iface-select" class="input input--select">
+            <option value="">Chargement…</option>
+          </select>
+
+          <label class="visually-hidden" for="bpf-filter">Filtre de capture</label>
+          <input id="bpf-filter" class="input" type="text" placeholder="filtre (ex. tcp port 443)"
+                 autocomplete="off" spellcheck="false">
+
+          <button id="btn-start" class="btn btn--primary" type="button">Démarrer</button>
+          <button id="btn-stop" class="btn btn--danger" type="button" disabled>Arrêter</button>
+          <button id="btn-reset" class="btn btn--ghost" type="button">Vider</button>
+        </div>
+        
+      </div>
+    </header>
+
+    
+
+    <div id="flash" class="flash" role="status" aria-live="polite" hidden></div>
+
+    <main id="contenu" class="content">
+      
+
+<section class="cards" aria-label="Indicateurs principaux">
+  <article class="card">
+    <span class="card-label">Paquets observés</span>
+    <span class="card-value" id="stat-packets">0</span>
+    <span class="card-note">depuis le début de la capture</span>
+  </article>
+  <article class="card">
+    <span class="card-label">Communications</span>
+    <span class="card-value" id="stat-flows">0</span>
+    <span class="card-note"><span id="stat-active">0</span> encore actives</span>
+  </article>
+  <article class="card">
+    <span class="card-label">Volume échangé</span>
+    <span class="card-value" id="stat-bytes">0 o</span>
+    <span class="card-note">toutes communications confondues</span>
+  </article>
+  <article class="card card--accent">
+    <span class="card-label">Événements</span>
+    <span class="card-value" id="stat-events">0</span>
+    <span class="card-note" id="stat-events-note">aucun pour l'instant</span>
+  </article>
+</section>
+
+<section class="panel panel--summary">
+  <header class="panel-head">
+    <h2 class="panel-title">Résumé de la session</h2>
+    <div class="panel-actions">
+      <span class="panel-hint" id="summary-source">—</span>
+      <button class="btn btn--ghost btn--small" type="button" id="btn-summary">Actualiser</button>
+    </div>
+  </header>
+  <p class="summary-text" id="summary-text">
+    Aucun résumé pour l'instant. Démarrez une capture, puis actualisez.
+  </p>
+  <p class="summary-guardrail" id="summary-guardrail" hidden></p>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Activité du réseau</h2>
+    <span class="panel-hint" id="traffic-hint">débit mesuré toutes les 3 secondes, sur les 5 dernières minutes</span>
+  </header>
+  <div id="traffic-chart" class="chart chart--traffic">
+    <p class="empty">Démarrez une capture pour voir l'activité.</p>
+  </div>
+</section>
+
+<div class="grid grid--2">
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Répartition par taille de paquet</h2>
+      <span class="panel-hint">des petites trames de signalisation, ou de gros transferts ?</span>
+    </header>
+    <div id="size-chart">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Qui occupe le réseau</h2>
+      <span class="panel-hint">part de chaque protocole, en volume</span>
+    </header>
+    <div id="hierarchy-chart">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </section>
+</div>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">État des services</h2>
+    <span class="panel-hint">ce qui fonctionne, et ce qui ne répond pas</span>
+  </header>
+  <div class="services" id="services-state">
+    <p class="empty">Vérification en cours…</p>
+  </div>
+</section>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Protocoles observés</h2>
+      <span class="panel-hint">proportion des paquets</span>
+    </header>
+    <div id="protocol-chart" class="chart">
+      <p class="empty">Aucune donnée : démarrez une capture pour observer le trafic.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Ports les plus utilisés</h2>
+      <span class="panel-hint">port de service contacté</span>
+    </header>
+    <div id="port-chart" class="chart">
+      <p class="empty">Aucune donnée pour l'instant.</p>
+    </div>
+  </section>
+
+</div>
+
+<div class="grid grid--2">
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Principales sources</h2>
+      <span class="panel-hint">qui émet le plus de paquets</span>
+    </header>
+    <ul id="top-sources" class="list"><li class="empty">Aucune donnée.</li></ul>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2 class="panel-title">Principales destinations</h2>
+      <span class="panel-hint">vers qui le trafic se dirige</span>
+    </header>
+    <ul id="top-destinations" class="list"><li class="empty">Aucune donnée.</li></ul>
+  </section>
+
+</div>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Événements récents</h2>
+    <a class="panel-link" href="/events">tout voir</a>
+  </header>
+  <div id="recent-events" class="events">
+    <p class="empty">Aucun événement détecté pour l'instant.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2 class="panel-title">Derniers paquets capturés</h2>
+    <a class="panel-link" href="/packets">tout voir</a>
+  </header>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">N°</th>
+          <th scope="col">Source</th>
+          <th scope="col">Destination</th>
+          <th scope="col">Protocole</th>
+          <th scope="col">Drapeaux</th>
+          <th scope="col">Taille</th>
+          <th scope="col">Résumé</th>
+        </tr>
+      </thead>
+      <tbody id="recent-packets">
+        <tr><td colspan="7" class="empty">Aucun paquet capturé pour l'instant.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+    </main>
+
+    <footer class="footer">
+      <span>Intelligent Network Packet Analyzer — sprint Python 3</span>
+      <span class="footer-sep">·</span>
+      <span>Analyse fondée uniquement sur les paquets réellement observés</span>
+    </footer>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=1791878940" defer></script>
+
+</body>
+</html>

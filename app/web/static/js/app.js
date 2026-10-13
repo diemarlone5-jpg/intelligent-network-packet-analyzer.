@@ -272,13 +272,17 @@
     return String(principal);
   }
 
+  /* Infobulle de la colonne Organisation.
+
+     On n'y met PAS la ville ni le pays : le siege d'une organisation n'est pas
+     la position d'une personne, et l'afficher au survol laisserait croire le
+     contraire. L'infobulle repond a une seule question : a qui est l'adresse ? */
   function orgTitle(geo) {
     if (!geo || geo.error) return "";
     var morceaux = [];
     if (geo.isp) morceaux.push("Opérateur : " + geo.isp);
     if (geo.org) morceaux.push("Organisation : " + geo.org);
     if (geo.asn) morceaux.push("Réseau : " + fmtAsn(geo.asn));
-    if (geo.city) morceaux.push("Ville : " + geo.city);
     return morceaux.join("\n");
   }
 
@@ -286,13 +290,22 @@
      points de suspension quand il ne tient pas. C'est le comportement des
      colonnes de Wireshark, et la valeur complete reste accessible au survol
      ainsi que dans le detail du paquet. Une colonne non bornee rendrait le
-     tableau plus large que l'ecran et obligerait a defiler pour lire. */
-  function endpointCell(host, port, extraClass) {
-    var texte = endpoint(host, port);
+     tableau plus large que l'ecran et obligerait a defiler pour lire.
+
+     Quand l'adresse est une traduction NAT64, on affiche l'adresse IPv4 qu'elle
+     transporte : c'est la destination REELLE, et la seule forme que l'utilisateur
+     puisse relier a un service. La forme d'origine reste dans l'infobulle, pour
+     ne rien perdre de ce qui a circule sur le fil. */
+  function endpointCell(host, port, traduite, extraClass) {
+    var brut = endpoint(host, port);
+    var texte = traduite ? endpoint(traduite, port) : brut;
+    var infobulle = traduite
+      ? brut + "\nAdresse traduite (NAT64) — destination réelle : " + traduite
+      : brut;
     return h("td", {
-      class: "mono endpoint " + (extraClass || ""),
+      class: "mono endpoint " + (traduite ? "endpoint--traduit " : "") + (extraClass || ""),
       text: texte,
-      title: texte
+      title: infobulle
     });
   }
 
@@ -306,8 +319,8 @@
     }, [
       h("td", { class: "mono num", text: String(record.number) }),
       h("td", { class: "mono instant", text: fmtClock(record.ts) }),
-      endpointCell(record.src, record.src_port),
-      endpointCell(record.dst, record.dst_port),
+      endpointCell(record.src, record.src_port, record.src_ipv4),
+      endpointCell(record.dst, record.dst_port, record.dst_ipv4),
       h("td", null, badgeFor(record.protocol)),
       h("td", { class: "mono num", text: (record.size || 0) + " o" }),
       h("td", { class: "org", text: orgText(record.geo), title: orgTitle(record.geo) }),

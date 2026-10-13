@@ -170,6 +170,35 @@ Va sur **Comprendre**, puis **Paramètres**.
 > concerné. Il faudrait un port miroir sur un commutateur administrable, ou un
 > hub. C'est une limite du réseau, pas de mon code — et la carte le dit au lieu
 > de le cacher. »
+>
+> « Ce que je vois quand même : ce que les appareils **diffusent** à tout le
+> réseau. Ma page *Réseau local* liste ainsi les appareils présents — une
+> télévision, un Chromecast, un Mac — avec leur adresse physique et les services
+> qu'ils annoncent. C'est de la **présence**, pas du **contenu**. »
+
+### « Pourquoi ces adresses sont soulignées ? »
+
+*(Le meilleur moment pour cette réponse : c'est visible à l'écran, et peu de
+candidats l'ont prévu.)*
+
+> « Parce que ce n'est pas l'adresse qui a circulé sur le fil. Mon réseau n'a pas
+> d'IPv4 natif : l'opérateur traduit les adresses. Le paquet contient
+> `64:ff9b::3ad:153f`, et cette adresse cache `3.173.21.63`. »
+
+**Puis montre le survol** : l'infobulle affiche l'adresse d'origine.
+
+> « J'affiche donc la destination réelle et je garde l'originale au survol. Sans
+> ce décodage, sur un réseau mobile, la majorité de mes paquets n'afficherait
+> **aucune organisation** : on ne peut pas interroger une adresse IPv6 de
+> traduction, elle n'appartient à personne. »
+
+**Si on te demande si c'est fiable** :
+
+> « Je ne décode que la forme prévue par la RFC 6052, où l'adresse IPv4 occupe
+> les 32 derniers bits. Les autres formes de traduction — 6to4, Teredo —
+> placent l'adresse ailleurs, parfois en la brouillant : mon code refuse de
+> décoder plutôt que d'afficher une adresse fausse. C'est testé, y compris les
+> cas où il doit refuser. »
 
 ### « Pourquoi Supabase ? »
 

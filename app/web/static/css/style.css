@@ -601,6 +601,14 @@ code, .mono {
   text-overflow: ellipsis;
 }
 
+/* Adresse de traduction NAT64 : le texte affiche est l'adresse IPv4 reelle, pas
+   celle qui a circule. Un soulignement pointille signale cette transformation,
+   sans elle l'utilisateur croirait lire l'adresse du fil. */
+.table td.endpoint--traduit {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
 /* Colonne « organisation » de la table des paquets. Elle a récupéré la place
    de l'ancienne colonne « pays », retirée : elle peut donc être plus large. */
 .table td.org {
